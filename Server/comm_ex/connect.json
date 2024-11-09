@@ -1,0 +1,7 @@
+{
+    "convention": "connect",
+    "data": {
+        "username": "string",
+        "password": "hashed string"
+    }
+}
