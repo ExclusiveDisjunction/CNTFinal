@@ -1,0 +1,7 @@
+{
+    "convention": "greet",
+    "direction": "request",
+    "data": {
+        "path": "string"
+    }
+}

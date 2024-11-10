@@ -1,0 +1,8 @@
+{
+    "convention": "ack",
+    "direction": "response",
+    "data": {
+        "code": "number",
+        "reason": "string"
+    }
+}

@@ -1,0 +1,23 @@
+{
+    "convention": "dir",
+    "direction": "response",
+    "data": {
+        "response": "200 | 401",
+        "message": "string",
+        "root": {
+            "kind": "directory",
+            "name": "root",
+            "isCurrent": false,
+            "contents": [
+                {
+                    "kind": "directory | file",
+                    "name": "string",
+                    "isCurrent": false,
+                    "contents": [
+
+                    ]
+                }
+            ]
+        }
+    }
+}

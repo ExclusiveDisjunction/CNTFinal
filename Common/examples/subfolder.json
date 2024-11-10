@@ -1,0 +1,8 @@
+{
+    "convention": "subfolder",
+    "direction": "request",
+    "data": {
+        "path": "relative path",
+        "action": "delete | add"
+    }
+}
