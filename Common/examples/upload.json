@@ -4,8 +4,6 @@
     "data": {
         "name": "string",
         "kind": "audio | video | text",
-        "bufferSize": "int",
-        "windowSize": "int",
-        "fileTotalSize": "int"
+        "size": "int"
     }
 }

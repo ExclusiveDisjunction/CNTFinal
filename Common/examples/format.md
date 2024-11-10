@@ -56,9 +56,7 @@ Submit a request to upload a file. The direction is only `request`.
 The data section must contain:
 1. `name`: File name
 2. `kind`: Either `audio`, `video`, or `text`.
-3. `bufferSize`: A number telling the server to expect a specified bufferSize
-4. `windowSize`: The number of times that the client will send a message
-5. `fileTotalSize`: The size of the file, in bytes. 
+3. `size`: The size of the file, in bytes. 
 
 The upload will respond with an `ack`:
 1. 100: Send file
@@ -72,6 +70,7 @@ After the `ack` has been sent, the server expects the client to send the informa
 1. 200: OK
 
 ## Download
+
 ### Request
 Request that a file on the server get sent to the client.
 
@@ -93,8 +92,6 @@ The data section must contain:
 3. `format`: Can either be empty (error status), or contain:
     1. `kind`: The kind of file. Either `text`, `video`, or `audio`
     2. `size`: The size of the file, in bytes
-    3. `bufferSize`: The size of the buffer the server will be sending the file in
-    4. `windowSize`: The number of times the server will send a complete file. 
 
 ## Dir
 ### Request
@@ -120,6 +117,7 @@ The format for directories and files goes as follows:
 2. `name`: The name of the resource
 3. `isCurrent`: Denotes if this is the current directory of the client
 4. `contents`: A list containing this format
+5. `owner`: The owner of the resource. For directories, this is `server`. 
 
 Note that the first entry in the data is the `root` directory.
 

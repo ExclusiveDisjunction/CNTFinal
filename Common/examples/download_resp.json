@@ -6,9 +6,7 @@
         "message": "string",
         "format": {
             "kind": "text | video | audio",
-            "size": "int",
-            "bufferSize": "int",
-            "windowSize": "int"
+            "size": "int"
         }
     }
 }
