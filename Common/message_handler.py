@@ -114,3 +114,57 @@ def make_download_resp(status: int, message: str, kind: FileType | None = None, 
         }
 
     return json.dumps(result)
+
+def parse_message(text: str) -> tuple[MessageType, bool, dict] | None:
+    """
+        Obtains the decoded message from a JSON formatted string. If the boolean memember result is true, it is a request.
+        Returns None if the format is invalid.
+    """
+
+    try:
+        decoded = json.loads(text)
+    except:
+        return None
+
+    msg_type_s = None
+    req = None
+    data = None
+    for k, v in decoded.items():
+        if k == "convention":
+            msg_type_s = v
+        elif k == "direction":
+            if v == "request":
+                req = True
+            else:
+                req = False
+        elif k == "data":
+            data = v
+
+    if msg_type_s == None or req == None or data == None:
+        return None
+    
+    match msg_type_s:
+        case "connect":
+            msg_type = MessageType.Connect
+        case "close":
+            msg_type = MessageType.Close
+        case "ack":
+            msg_type = MessageType.Ack
+        case "upload":
+            msg_type = MessageType.Upload
+        case "download":
+            msg_type = MessageType.Download
+        case "delete":
+            msg_type = MessageType.Delete
+        case "dir":
+            msg_type = MessageType.Dir
+        case "move":
+            msg_type = MessageType.Move
+        case "subfolder":
+            msg_type = MessageType.Subfolder
+
+    return (
+        msg_type_s,
+        req,
+        data
+    )
