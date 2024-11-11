@@ -1,5 +1,6 @@
 import json
 from enum import Enum
+from typing import Self
 
 from ..Server.server_path import DirectoryInfo, FileType
 
@@ -14,157 +15,456 @@ class MessageType(Enum):
     Move = "move"
     Subfolder = "subfolder"
 
-def make_basis(command: MessageType, request: bool = True) -> dict:
-    if request:
-        direction = "request"
-    else:
-        direction = "response"
-
-    result = {
-        "command": command.value,
-        "direction": direction,
-        "data": {
-
-        }
-    }
-    return result
-
-def make_connect(username: str, passwordHash: str) -> str:
-    result = make_basis(MessageType.Connect)
-    result["data"]["username"] = username 
-    result["data"]["password"] = passwordHash
-
-    return json.dumps(result)
-def make_close() -> str:
-    result = make_basis(MessageType.Close)
-
-    return json.dumps(result)
-def make_ack(code: int, message: str) -> str:
-    result = make_basis(MessageType.ack)
-    result["data"]["code"] = code 
-    result["data"]["message"] = message
-
-    return json.dumps(result)
-
-def make_move(path: str) -> str:
-    result = make_basis(MessageType.Move)
-
-    result["data"]["path"] = path
-
-    return json.dumps(result)
-def make_delete(path: str) -> str:
-    result = make_basis(MessageType.Delete)
-
-    result["data"]["path"] = path
-
-    return json.dumps(result)
-
-def make_subfolder(path: str, create: bool) -> str:
-    result = make_basis(MessageType.Subfolder)
-
-    result["data"]["path"] = path
-    if create:
-        result["data"]["action"] = "add"
-    else:
-        result["data"]["action"] = "delete"
-
-    return json.dumps(result)
-
-def make_dir_request() -> str:
-    result = make_basis(MessageType.Dir)
-
-    return json.dumps(result)
-def make_dir_response(code: int, message: str, rootDir: DirectoryInfo) -> str:
-    result = make_basis(MessageType.Dir, False)
-
-    result["data"]["response"] = code
-    result["data"]["message"] = message
-    result["data"]["root"] = rootDir.to_message_dict()
-
-    return json.dumps(result)
-
-def make_upload_req(name: str, kind: FileType, size: int) -> str:
-    result = make_basis(MessageType.Upload)
-
-    result["data"]["name"] = name
-    result["data"]["kind"] = kind.value 
-    result["data"]["size"] = size
-
-    return json.dumps(result)
-
-def make_download_req(path: str) -> str:
-    result = make_basis(MessageType.Download)
-
-    result["data"]["path"] = path
-
-    return json.dumps(result)
-def make_download_resp(status: int, message: str, kind: FileType | None = None, size: int | None = None):
-    result = make_basis(MessageType.Download, False)
-
-    result["data"]["status"] = status
-    result["data"]["message"] = message
-    if kind == None or size == None:
-        result["data"]["format"] = dict()
-    elif kind == None or size == None: # Information missing
-        raise ValueError("Either kind or size is none, this is not allowed")
-    else:
-        result["data"]["format"] = {
-            "kind": kind.value,
-            "size": size
-        }
-
-    return json.dumps(result)
-
-def parse_message(text: str) -> tuple[MessageType, bool, dict] | None:
-    """
-        Obtains the decoded message from a JSON formatted string. If the boolean memember result is true, it is a request.
-        Returns None if the format is invalid.
-    """
-
-    try:
-        decoded = json.loads(text)
-    except:
-        return None
-
-    msg_type_s = None
-    req = None
-    data = None
-    for k, v in decoded.items():
-        if k == "convention":
-            msg_type_s = v
-        elif k == "direction":
-            if v == "request":
-                req = True
-            else:
-                req = False
-        elif k == "data":
-            data = v
-
-    if msg_type_s == None or req == None or data == None:
-        return None
+class MessageBasis:
+    def message_type(self) -> MessageType:
+        raise NotImplementedError()
+    def data(self) -> dict:
+        raise NotImplementedError()
+    def data_response(self) -> dict:
+        raise NotImplementedError()
     
-    match msg_type_s:
-        case "connect":
-            msg_type = MessageType.Connect
-        case "close":
-            msg_type = MessageType.Close
-        case "ack":
-            msg_type = MessageType.Ack
-        case "upload":
-            msg_type = MessageType.Upload
-        case "download":
-            msg_type = MessageType.Download
-        case "delete":
-            msg_type = MessageType.Delete
-        case "dir":
-            msg_type = MessageType.Dir
-        case "move":
-            msg_type = MessageType.Move
-        case "subfolder":
-            msg_type = MessageType.Subfolder
+    def construct_message_json(self, request: bool = True) -> str:
+        if request:
+            direction_str = "request"
+        else:
+            direction_str = "response"
 
-    return (
-        msg_type_s,
-        req,
-        data
-    )
+        if request:
+            data = self.data()
+        else:
+            data = self.data_response()
+        
+        result = {
+            "convention": self.message_type().value,
+            "direction": direction_str,
+            "data": data
+        }
+
+        return json.dumps(result)
+    
+    def parse_from_json(message: str) -> Self:
+        try:
+            decoded = json.loads(message)
+        except:
+            return None
+
+        try:
+            msg_type = MessageType(decoded["convention"])
+
+            req_raw = decoded["direction"]
+            if req_raw == "request":
+                req = True
+            elif req_raw == "response":
+                req = False
+            else:
+                req = None
+
+            data = dict(decoded["data"])
+        except: 
+            msg_type = None
+            req = None
+            data = None
+
+        if msg_type == None or req == None or data == None:
+            return None
+        
+        try:
+            match msg_type:
+                case MessageType.Connect:
+                    return ConnectMessage.parse(data, req)
+                case MessageType.Close:
+                    return CloseMessage.parse(data, req)
+                case MessageType.Ack:
+                    return AckMessage.parse(data, req)
+                case MessageType.Upload:
+                    return UploadMessage.parse(data, req)
+                case MessageType.Download:
+                    return DownloadMessage.parse(data, req)
+                case MessageType.Delete:
+                    return DeleteMessage.parse(data, req)
+                case MessageType.Dir:
+                    return DirMessage.parse(data, req)
+                case MessageType.Move:
+                    return MoveMessage.parse(data, req)
+                case MessageType.Subfolder:
+                    return SubfolderMessage.parse(data, req)
+        except:
+            return None
+
+class ConnectMessage(MessageBasis):
+    def __init__(self, username: str, passwordHash: str):
+        self.__username = username
+        self.__password = passwordHash
+
+    def message_type(self) -> MessageType:
+        return MessageType.Connect
+    def data(self) -> dict:
+        return {
+            "username": self.__username,
+            "password": self.__password
+        }
+    
+    def username(self) -> str:
+        return self.__username
+    def passwordHash(self) -> str:
+        return self.__password
+    
+    def parse(data: dict, req: bool = True) -> Self:
+        if not req:
+            raise ValueError("Connect message has no response variant")
+        
+        username = data["username"]
+        password = data["password"]
+        
+        if username == None or password == None:
+            raise ValueError("The required fields of username and password were not provided")
+        else:
+            return ConnectMessage(username, password)
+
+class AckMessage(MessageBasis):
+    def __init__(self, code: int, message: str):
+        self.__code = code
+        self.__message = message
+
+    def message_type(self) -> MessageType:
+        return MessageType.Ack
+    def data(self) -> dict:
+        return {
+            "code": self.__code,
+            "message": self.__message
+        }
+
+    def code(self) -> int:
+        return self.__code
+    def message(self) -> str:
+        return self.__message
+    
+    def parse(data: dict, req: bool = True) -> Self:
+        if req:
+            raise ValueError("Ack message has no request variant")
+        
+        try:
+            code = int(data["code"])
+            message = data["message"]
+        except:
+            code = None
+            message = None
+        
+        if code == None or message == None:
+            raise ValueError("The required fields of username and password were not provided")
+        else:
+            return AckMessage(code, message)
+
+class CloseMessage(MessageBasis):
+    def __init__(self):
+        pass 
+
+    def message_type(self) -> MessageType:
+        return MessageType.Close
+    def data(self) -> dict:
+        return { }
+    
+    def parse(data: dict, req: bool = True) -> Self:
+        if not req:
+            raise ValueError("Close message has no response variant")
+
+        return CloseMessage()
+
+class UploadMessage(MessageBasis):
+    def __init__(self, name: str, kind: FileType, size: int):
+        self.__name = name
+        self.__kind = kind
+        self.__size = size
+
+    def message_type(self) -> MessageType:
+        return MessageType.Upload
+    def data(self) -> dict:
+        return {
+            "name": self.__name,
+            "kind": self.__kind.value,
+            "size": self.__size
+        }
+    
+    def name(self) -> str:
+        return self.__name
+    def kind(self) -> FileType:
+        return self.__kind
+    def size(self) -> int:
+        return self.__size
+    
+    def parse(data: dict, req: bool = True) -> Self:
+        if not req:
+            raise ValueError("Upload message has no response variant")
+        
+        try:
+            name = data["name"]
+            kind = FileType(data["kind"])
+            size = int(data["size"])
+        except:
+            name = None
+            kind = None
+            size = None
+        
+        if name == None or kind == None or size == None:
+            raise ValueError("The dictionary provided does not supply enough information")
+        
+        return UploadMessage(name, kind, size)
+
+class DownloadMessage(MessageBasis):
+    def __init__(self, path: str):
+        self.__path = path
+        self.__is_response = False
+    def __init__(self, status: int, message: str, kind: FileType | None, size: int | None):
+        if (kind == None and size != None) or (kind != None and size != None):
+            raise ValueError("The kind and size must both have a value, or neither have a value")
+        
+        self.__is_response = True
+
+        self.__status = status
+        self.__message = message
+        self.__kind = kind
+        self.__size = size
+
+    def message_type(self) -> MessageType:
+        return MessageType.Download
+    def data(self) -> dict:
+        if self.is_response():
+            raise ValueError("Mode is set to response")
+        
+        return {
+            "path": self.__path
+        }
+    def data_response(self) -> dict:
+        if self.is_request():
+            raise ValueError("Mode is set to request")
+        
+        if self.__kind == None or self.__size == None: # Format is empty because status is an error code
+            format = {
+
+            }
+        else:
+            format = {
+                "kind": self.__kind,
+                "size": self.__size 
+            }
+
+        return {
+            "status": self.__status,
+            "message": self.__message,
+            "format": format
+        }
+        
+    def is_request(self) -> bool:
+        return not self.__is_response
+    def is_response(self) -> bool:
+        return self.__is_response
+    
+    def path(self) -> str | None:
+        if self.is_request():
+            return self.__path
+        else:
+            return None
+    def status(self) -> int | None:
+        if self.is_response():
+            return self.__status
+        else:
+            return None
+    def message(self) -> str | None:
+        if self.is_response():
+            return self.__message
+        else:
+            return None
+    def kind(self) -> FileType | None:
+        if self.is_response():
+            return self.__kind
+        else:
+            return None
+    def size(self) -> int | None:
+        if self.is_response():
+            return self.__size
+        else:
+            return None
+    
+    def parse(data: dict, req: bool = True) -> Self:
+        if req:
+            path = data["path"]
+
+            if path == None:
+                raise ValueError("Not enough data to fill this message")
+            else:
+                return DownloadMessage(path)
+        else:
+            try:
+                status = int(data["status"])
+                message = data["message"]
+                format = dict(data["format"])
+            except:
+                status = None
+                message = None
+                format = None
+
+            if status == None or message == None or format == None:
+                raise ValueError("Not enough data to fill this message")
+            
+            if len(format) == 0:
+                return DownloadMessage(status, message, None, None)
+            else:
+                return DownloadMessage(status, message, format["kind"], format["size"])
+
+class DeleteMessage(MessageBasis):
+    def __init__(self, path: str):
+        self.__path = path
+
+    def message_type(self) -> MessageType:
+        return MessageType.Delete
+    def data(self) -> dict:
+        return {
+            "path": self.__path
+        }
+
+    def path(self) -> str:
+        return self.__path
+    
+    def parse(data: dict, req: bool = True) -> Self:
+        if not req:
+            raise ValueError("Delete message has no response variant")
+        
+        path = data["path"]
+
+        if path == None:
+            raise ValueError("Not enough data supplied")
+        else:
+            return DeleteMessage(path)
+
+class DirMessage(MessageBasis):
+    def __init__(self):
+        self.__is_response = False
+
+    def __init__(self, code: int, message: str, root: DirectoryInfo):
+        self.__is_response = True
+
+        self.__code = code
+        self.__message = message
+        self.__root = root
+
+    def message_type(self) -> MessageType:
+        return MessageType.Dir
+    def data(self) -> dict:
+        if self.__is_response:
+            raise ValueError("The message is in response mode")
+        
+        return { }
+    def data_response(self) -> dict:
+        if not self.__is_response:
+            raise ValueError("The message is in request mode")
+        
+        return {
+            "response": self.__code,
+            "message": self.__message,
+            "root": self.__root
+        }
+    
+    def is_request(self) -> bool:
+        return not self.__is_response
+    def is_response(self) -> bool:
+        return self.__is_response
+    
+    def code(self) -> int | None:
+        if self.is_request():
+            return None
+        else:
+            return self.__code
+    def message(self) -> str | None:
+        if self.is_request():
+            return None
+        else:
+            return self.__message
+    def root(self) -> DirectoryInfo | None:
+        if self.is_request():
+            return None
+        else:
+            return self.__root
+    
+    def parse(data: dict, req: bool = True) -> Self:
+        if req:
+            return DirMessage()
+        else:
+            code = None
+            message = None
+            root = None
+
+            for name, value in data.items():
+                match name:
+                    case "response":
+                        code = int(value)
+                    case "message":
+                        message = value
+                    case "root":
+                        root = DirectoryInfo.from_message_dict(dict(value))
+            
+            if code == None or message == None or root == None:
+                raise ValueError("The dictionary does not provide enough information, or the root directory is of invalid format")
+            else:
+                return DirMessage(code, message, root)
+
+class MoveMessage(MessageBasis):
+    def __init__(self, path: str):
+        self.__path = path
+
+    def message_type(self) -> MessageType:
+        return MessageType.Move
+    def data(self) -> dict:
+        return {
+            "path": self.__path
+        }
+
+    def path(self) -> str:
+        return self.__path
+    
+    def parse(data: dict, req: bool = True) -> Self:
+        if not req:
+            raise ValueError("Move message has no response variant")
+        
+        path = data["path"]
+
+        if path == None:
+            raise ValueError("Not enough data supplied")
+        else:
+            return MoveMessage(path)
+            
+class SubfolderAction(Enum):
+    Delete = "delete"
+    Add = "add"
+class SubfolderMessage(MessageBasis):
+    def __init__(self, path: str, action: SubfolderAction):
+        self.__path = path
+        self.__action = action
+
+    def message_type(self) -> MessageType:
+        return MessageType.Subfolder
+    def data(self) -> dict:
+        return {
+            "path": self.__path,
+            "action": self.__action.value
+        }
+
+    def path(self) -> str:
+        return self.__path
+    def action(self) -> SubfolderAction:
+        return self.__action
+    
+    def parse(data: dict, req: bool = True) -> Self:
+        if not req:
+            raise ValueError("Subfolder message has no response variant")
+        
+        try:
+            path = data["path"]
+            action = SubfolderAction(data["action"])
+        except:
+            path = None
+            action = None
+
+        if path == None or action == None:
+            raise ValueError("Not enough data supplied")
+        else:
+            return SubfolderMessage(path, action)

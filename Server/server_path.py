@@ -1,11 +1,14 @@
 from enum import Enum
+from typing import Self
 
 class ServerPath:
     pass
 
 class DirectoryInfo:
     def to_message_dict() -> dict:
-        return dict()
+        pass
+    def from_message_dict(dict: input) -> Self | None:
+        pass
 
 class FileInfo:
     pass
