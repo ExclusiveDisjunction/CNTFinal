@@ -2,7 +2,7 @@ import json
 from enum import Enum
 from typing import Self
 
-from ..Server.server_path import DirectoryInfo, FileType
+from Server.server_path import DirectoryInfo, FileType
 
 class MessageType(Enum):
     Connect = "connect"
@@ -19,9 +19,15 @@ class MessageBasis:
     def message_type(self) -> MessageType:
         raise NotImplementedError()
     def data(self) -> dict:
-        raise NotImplementedError()
+        return {}
     def data_response(self) -> dict:
-        raise NotImplementedError()
+        return {}
+    
+    def __eq__(self, other: Self) -> bool:
+        try:
+            return self.message_type() == other.message_type() and self.data() == other.data() and self.data_response() == other.data_response()
+        except:
+            return False
     
     def construct_message_json(self, request: bool = True) -> str:
         if request:
@@ -29,10 +35,13 @@ class MessageBasis:
         else:
             direction_str = "response"
 
-        if request:
-            data = self.data()
-        else:
-            data = self.data_response()
+        try:
+            if request:
+                data = self.data()
+            else:
+                data = self.data_response()
+        except:
+            raise ValueError("The message does support the current mode")
         
         result = {
             "convention": self.message_type().value,
@@ -128,7 +137,7 @@ class AckMessage(MessageBasis):
 
     def message_type(self) -> MessageType:
         return MessageType.Ack
-    def data(self) -> dict:
+    def data_response(self) -> dict:
         return {
             "code": self.__code,
             "message": self.__message
@@ -211,32 +220,44 @@ class UploadMessage(MessageBasis):
         return UploadMessage(name, kind, size)
 
 class DownloadMessage(MessageBasis):
-    def __init__(self, path: str):
-        self.__path = path
-        self.__is_response = False
-    def __init__(self, status: int, message: str, kind: FileType | None, size: int | None):
-        if (kind == None and size != None) or (kind != None and size != None):
-            raise ValueError("The kind and size must both have a value, or neither have a value")
-        
-        self.__is_response = True
+    def __init__(self, *args):
+        if len(args) == 1:
+            self.__path = args[0]
+            self.__is_response = False
+        elif len(args) == 4:
+            status = int(args[0])
+            message = args[1]
+            kind = args[2]
+            size = args[3]
 
-        self.__status = status
-        self.__message = message
-        self.__kind = kind
-        self.__size = size
+            if (kind == None and size != None) or (kind != None and size == None):
+                raise ValueError("The kind and size must both have a value, or neither have a value")
+
+            self.__status = status
+            self.__message = message
+            self.__is_response = True
+            if kind == None and size == None:
+                self.__kind = None
+                self.__size = None
+            else:
+                self.__kind = FileType(kind)
+                self.__size = int(size)
+        else:
+            raise ValueError("too many, or not enough, positional arguments supplied")
+        
 
     def message_type(self) -> MessageType:
         return MessageType.Download
     def data(self) -> dict:
         if self.is_response():
-            raise ValueError("Mode is set to response")
+            return {}
         
         return {
             "path": self.__path
         }
     def data_response(self) -> dict:
         if self.is_request():
-            raise ValueError("Mode is set to request")
+            return {}
         
         if self.__kind == None or self.__size == None: # Format is empty because status is an error code
             format = {
@@ -244,7 +265,7 @@ class DownloadMessage(MessageBasis):
             }
         else:
             format = {
-                "kind": self.__kind,
+                "kind": self.__kind.value,
                 "size": self.__size 
             }
 
@@ -337,31 +358,37 @@ class DeleteMessage(MessageBasis):
             return DeleteMessage(path)
 
 class DirMessage(MessageBasis):
-    def __init__(self):
-        self.__is_response = False
+    def __init__(self, *args):
+        if len(args) == 0:
+            self.__is_response = False
+        elif len(args) == 3:
+            code = args[0]
+            message = args[1]
+            root = args[2]
 
-    def __init__(self, code: int, message: str, root: DirectoryInfo):
-        self.__is_response = True
+            if not isinstance(root, DirectoryInfo):
+                raise ValueError("The root must be a directory info")
 
-        self.__code = code
-        self.__message = message
-        self.__root = root
+            self.__is_response = True
+            self.__code = code
+            self.__message = message
+            self.__root = root
 
     def message_type(self) -> MessageType:
         return MessageType.Dir
     def data(self) -> dict:
         if self.__is_response:
-            raise ValueError("The message is in response mode")
+            return {}
         
         return { }
     def data_response(self) -> dict:
         if not self.__is_response:
-            raise ValueError("The message is in request mode")
+            return {}
         
         return {
             "response": self.__code,
             "message": self.__message,
-            "root": self.__root
+            "root": self.__root.to_dict()
         }
     
     def is_request(self) -> bool:
