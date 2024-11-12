@@ -27,6 +27,13 @@ The ack, or acknoledgement command, is used by the server to send a quick messag
 
 ***Note***: If the client requests something that the server does not know how to futfil, it will return 418 (I'm a teapot)
 
+## Size
+Inform either the client or server that the message about to be sent is of a specified size, and to change the buffer size.
+It contains:
+1. `size`: The number of bytes about to be sent.
+
+This message is followed up with the information about to be sent. It is a bi-directional message
+
 ## Move
 Request that the directory be changed. The client must provide a relative path to move to. The direction is only `request`.
 The data section must contain:
