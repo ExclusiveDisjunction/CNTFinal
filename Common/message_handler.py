@@ -416,18 +416,14 @@ class DirMessage(MessageBasis):
         if req:
             return DirMessage()
         else:
-            code = None
-            message = None
-            root = None
-
-            for name, value in data.items():
-                match name:
-                    case "response":
-                        code = int(value)
-                    case "message":
-                        message = value
-                    case "root":
-                        root = DirectoryInfo.from_message_dict(dict(value))
+            try:
+                code = int(data["response"])
+                message = data["message"]
+                root = DirectoryInfo.from_message_dict(dict(data["root"]))
+            except:
+                code = None
+                message = None
+                root = None
             
             if code == None or message == None or root == None:
                 raise ValueError("The dictionary does not provide enough information, or the root directory is of invalid format")

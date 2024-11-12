@@ -7,8 +7,14 @@ class ServerPath:
 class DirectoryInfo:
     def to_dict(self) -> dict:
         return {} 
-    def from_message_dict(self, dict: input) -> Self | None:
-        pass
+    def from_message_dict(dict: input) -> Self | None:
+        return DirectoryInfo()
+    
+    def __eq__(self, other) -> bool:
+        if other == None:
+            return False
+        else:
+            return True
 
 class FileInfo:
     def __dict__() -> dict:
