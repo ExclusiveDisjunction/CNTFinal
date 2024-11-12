@@ -63,7 +63,7 @@ def dir_resp_test() -> bool:
                 FileInfo("thing2.txt", creds, FileType.Text)
             ],
             [
-                DirectoryInfo("two", [], [])
+                DirectoryInfo("two")
             ])
         ])
     encoded = json.dumps(root.to_dict())

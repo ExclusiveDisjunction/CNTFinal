@@ -84,10 +84,18 @@ class FileInfo:
         return env_path.joinpath(self.target_path_relative())
 
 class DirectoryInfo:
-    def __init__(self, name: str, files: list[FileInfo] | None, dirs: list[Self] | None, parent: Self | None = None):
+    def __init__(self, name: str, files: list[FileInfo] | None = None, dirs: list[Self] | None = None, parent: Self | None = None):
         self.__name = name
-        self.__files = files
-        self.__dirs = dirs
+        if files is None:
+            self.__files = []
+        else:
+            self.__files = files
+
+        if dirs is None:
+            self.__dirs = []
+        else:
+            self.__dirs = dirs
+
         self.__parent = parent
 
         # Build proper order
