@@ -4,20 +4,23 @@
     "data": {
         "response": "200 | 401",
         "message": "string",
+        "curr_dir": "path",
         "root": {
             "kind": "directory",
             "name": "root",
-            "isCurrent": false,
-            "owner": "server",
             "contents": [
                 {
-                    "kind": "directory | file",
+                    "kind": "directory",
                     "name": "string",
-                    "isCurrent": false,
-                    "owner": "server",
                     "contents": [
 
                     ]
+                },
+                {
+                    "kind": "file",
+                    "name": "str",
+                    "file_kind": "text | video | audio",
+                    "owner": "username"
                 }
             ]
         }

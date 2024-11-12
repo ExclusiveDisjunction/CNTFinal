@@ -1,4 +1,23 @@
 from Common.message_handler import *
+from Server.server_path import DirectoryInfo, FileInfo, FileType
+from Server.credentials import Credentials
+import socket
+
+def client_dummy() -> bool:
+    """
+    A simple script to test the functionality of the server
+    """
+
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect(("127.0.0.1", 8080))
+        data = s.recv(1024)
+        print(data.decode("utf-8"))
+
+        return True
+    except:
+        return False
+
 
 def messages_tester() -> bool:
     """
@@ -30,8 +49,35 @@ def messages_tester() -> bool:
     except Exception as e:
         print(f"Caught {str(e)}")
 
+def dir_resp_test() -> bool:
+    creds = Credentials("Hi", "dasldkfjsalkdjf")
+    root = DirectoryInfo("", 
+        [
+            FileInfo("thing.wav", creds, FileType.Audio),
+            FileInfo("thing2.wav", creds, FileType.Audio)
+        ],
+        [
+            DirectoryInfo("one", 
+            [
+                FileInfo("thing.txt", creds, FileType.Text),
+                FileInfo("thing2.txt", creds, FileType.Text)
+            ],
+            [
+                DirectoryInfo("two", [], [])
+            ])
+        ])
+    
+    root.correct_path(None, True)
+    encoded = json.dumps(root.to_dict())
+    print(encoded, end="\n\n")
+    
+    decoded = DirectoryInfo.from_dict(json.loads(encoded))
+    print(json.dumps(decoded.to_dict()))
+    print("\nSucessfully decoded")
+
+
 if __name__ == "__main__":
-    if messages_tester():
+    if dir_resp_test():
         print("\nAll tests passed")
     else:
         print("\nOne or more tests failed")

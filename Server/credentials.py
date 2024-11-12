@@ -1,7 +1,5 @@
 class Credentials:
     def __init__(self, username: str, passwordHash: str) -> None:
-        if len(username) == 0 or len(passwordHash) == 0:
-            raise SyntaxError("The username or password has were empty") 
 
         self.__username = username
         self.__passwordHash = passwordHash
@@ -12,4 +10,9 @@ class Credentials:
         return self.__passwordHash
     
     def __eq__(self, obj) -> bool:
-        return self.__username == obj.__username and self.__passwordHash == obj.__passwordHash
+        if self is None and obj is None:
+            return True
+        if self is None or obj is None:
+            return False
+        else:
+            return self.__username == obj.__username and self.__passwordHash == obj.__passwordHash

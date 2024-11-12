@@ -388,12 +388,17 @@ class DeleteMessage(MessageBasis):
 
 class DirMessage(MessageBasis):
     def __init__(self, *args):
+        """
+        If no arguments are provided, the message is a request. Otherwise, it expects 4 arguments: code, message, curr_dir, and root. 
+        """
+
         if len(args) == 0:
             self.__is_response = False
-        elif len(args) == 3:
+        elif len(args) == 4:
             code = args[0]
             message = args[1]
-            root = args[2]
+            curr_dir = args[2]
+            root = args[3]
 
             if not isinstance(root, DirectoryInfo):
                 raise ValueError("The root must be a directory info")
@@ -401,6 +406,7 @@ class DirMessage(MessageBasis):
             self.__is_response = True
             self.__code = code
             self.__message = message
+            self.__curr_dir = curr_dir
             self.__root = root
 
     def message_type(self) -> MessageType:
@@ -435,6 +441,11 @@ class DirMessage(MessageBasis):
             return None
         else:
             return self.__message
+    def curr_dir(self) -> str | None:
+        if self.is_request():
+            return None
+        else:
+            return self.__curr_dir
     def root(self) -> DirectoryInfo | None:
         if self.is_request():
             return None
@@ -448,16 +459,18 @@ class DirMessage(MessageBasis):
             try:
                 code = int(data["response"])
                 message = data["message"]
+                curr_dir = data["curr_dir"]
                 root = DirectoryInfo.from_message_dict(dict(data["root"]))
             except:
                 code = None
                 message = None
+                curr_dir = None
                 root = None
             
-            if code == None or message == None or root == None:
+            if code == None or message == None or curr_dir == None or root == None:
                 raise ValueError("The dictionary does not provide enough information, or the root directory is of invalid format")
             else:
-                return DirMessage(code, message, root)
+                return DirMessage(code, message, curr_dir, root)
 
 class MoveMessage(MessageBasis):
     def __init__(self, path: str):
