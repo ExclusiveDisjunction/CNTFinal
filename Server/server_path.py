@@ -2,7 +2,6 @@ from enum import Enum
 from typing import Self
 from pathlib import Path
 import os
-from Server.credentials import Credentials
 
 class FileType(Enum):
     Text = "text"
@@ -14,83 +13,90 @@ class FileInfo:
     A structure that contains the path & allows for relative moving
     """
 
-    def __init__(self, relative_path: Path | str, owner: Credentials, kind: FileType):
-        if relative_path == None:
-            raise ValueError("The path supplied must be valid and a file")
-        
-        if isinstance(relative_path, str):
-            relative_path = Path(relative_path)
-        
-        self.__path = relative_path
-        self.__owner = owner
+    def __init__(self, name: str | str, owner_username, kind: FileType, parent = None):
+        self.__parent = parent
+        self.__name = name
+        self.__owner = owner_username
         self.__kind = kind
 
     def to_dict(self) -> dict:
         return {
             "kind": "file",
-            "name": self.__path.name,
+            "name": self.__name,
             "file_kind": self.__kind.value,
-            "owner": self.__owner.getUsername()
+            "owner": self.__owner
         }
-    def from_dict(data: dict) -> Self:
+    def from_dict(data: dict, parent = None) -> Self:
         try:
-            path = Path(data["name"])
+            name = data["name"]
             file_kind = FileType(data["file_kind"])
-            owner = Credentials(data["owner"], str())
+            owner = data["owner"]
         except:
-            path = None
+            name = None
             file_kind = None
             owner = None
 
-        if path == None or file_kind == None or owner == None:
+        if name == None or file_kind == None or owner == None:
             raise ValueError("The dictionary does not contain enough data to fill this structure")
+        
+        return FileInfo(name, owner, file_kind, parent)
         
     
     def __eq__(self, other) -> bool:
-        if self == None and other == None:
+        if self is None and other is None:
             return True
-        elif self == None or other == None:
+        elif self is None or other is None:
             return False
         
-        return self.__path == other.__path and self.__owner == other.__owner
+        return self.__name == other.__name and self.__owner == other.__owner and self.__kind == other.__kind
     
     def name(self) -> str:
-        return self.__path.name
+        return self.__name
     def kind(self) -> FileType:
         return self.__kind
-    def owner(self) -> Credentials:
+    def owner_username(self) -> str:
         return self.__owner
-    def get_size(self) -> int | None: 
-        if not self.__path.exists():
+    def get_size(self, env_path: Path) -> int | None: 
+        path = self.target_path_absolute(env_path)
+        if path is None or not path.exists():
             return None
         
         return os.path.getsize(self.__path)
-        
-    def correct_path(self, parent: Path): 
-        self.__path = parent.joinpath(self.__path)
+    def parent(self):
+        return self.__parent
+    def set_parent(self, parent):
+        self.__parent = parent
     
     def target_path_relative(self) -> Path:
         """
         Returns the current path relative to the root
         """
-        return self.__path
+
+        if self.__parent is None:
+            return None
+        
+        return self.__parent.targt_path_relative().joinpath(self.__name)
+    
     def target_path_absolute(self, env_path: Path) -> str:
         """
         Returns the current path relative to the OS root
         """
-        return env_path + self.__path
+        return env_path.joinpath(self.target_path_relative())
 
 class DirectoryInfo:
-    def __init__(self, relative_path: Path, files: list[FileInfo] | None, dirs: list[Self] | None):
-        if relative_path == None:
-            raise ValueError("The path supplied must be valid and a file")
-        
-        if isinstance(relative_path, str):
-            relative_path = Path(relative_path)
-
-        self.__path = relative_path
+    def __init__(self, name: str, files: list[FileInfo] | None, dirs: list[Self] | None, parent: Self | None = None):
+        self.__name = name
         self.__files = files
         self.__dirs = dirs
+        self.__parent = parent
+
+        # Build proper order
+        for file in self.__files:
+            if file is not None:
+                file.set_parent(self)
+        for dir in self.__dirs:
+            if dir is not None:
+                dir.set_parent(self)
 
     def to_dict(self) -> dict:
         contents = []
@@ -101,7 +107,7 @@ class DirectoryInfo:
 
         return {
             "kind": "directory",
-            "name": self.get_name(),
+            "name": self.__name,
             "contents": contents
         } 
     def from_dict(data: dict) -> Self | None:
@@ -115,47 +121,46 @@ class DirectoryInfo:
         if name == None or contents == None:
             raise ValueError("The contents could not be read")
         
-        if name == "root":
-            path = Path("")
-        else:
-            path = Path(name)
-        
         files = []
         dirs = []
         for info in contents:
             if info["kind"] == "directory":
-                files.append(DirectoryInfo.from_dict(info))
+                dirs.append(DirectoryInfo.from_dict(info))
             elif info["kind"] == "file":
-                dirs.append(FileInfo.from_dict(info))
+                files.append(FileInfo.from_dict(info))
 
-        return DirectoryInfo(path, files, dirs)
-    
-    def correct_path(self, parent: Path, is_root: bool = True):
-        if is_root:
-            self.__path = Path("")
-        else:
-            self.__path = parent.joinpath(self.__path)
-
-        dirs, files = self.get_child_directories(), self.get_child_files()
-        for dir in dirs:
-            dir.correct_path(self.__path, False)
-        for file in files:
-                file.correct_path(self.__path)
-
+        return DirectoryInfo(name, files, dirs)
     
     def __eq__(self, other) -> bool:
-        if other == None:
+        if other is None and self is None:
+            return True
+        elif other is None or self is None:
             return False
         else:
-            return True
+            return self.__name == other.__name and self.__files == other.__files and self.__dirs == other.__dirs
         
-    def get_path(self):
-        return self.__path
-    def get_name(self) -> str:
-        if self.__path == "":
-            return "root"
+    def name(self) -> str:
+        return self.__name
+    def parent(self) -> Self | None:
+        return self.__parent
+    def set_parent(self, parent: Self | None):
+        self.__parent = parent
+
+    def target_path_relative(self) -> Path:
+        """
+        Returns the current path relative to the root
+        """
+
+        if self.__parent is None:
+            return Path("")
         else:
-            return self.__path.name
+            return self.__parent.target_path_relative().joinpath(self.__name)
+    
+    def target_path_absolute(self, env_path: Path) -> str:
+        """
+        Returns the current path relative to the OS root
+        """
+        return env_path.joinpath(self.target_path_relative())
         
     def get_child_directories(self) -> list[Self] | None:
         return self.__dirs
