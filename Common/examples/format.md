@@ -107,7 +107,8 @@ The data section consists of:
 1. `response`: The response code
     1. 200: Ok
     2. 401: Unauthorized (not signed in)
-2. `message`: The respone message
+2. `message`: The response message
+3. `curr_dir`: The current directory of the client
 3. `root`: The begining of the directory structure.
     1. This contains a specific format that is recursive to denote all files and folders. 
 
@@ -115,9 +116,8 @@ The format for directories and files goes as follows:
 
 1. `kind`: Either `directory` or `file`. 
 2. `name`: The name of the resource
-3. `isCurrent`: Denotes if this is the current directory of the client
-4. `contents`: A list containing this format
-5. `owner`: The owner of the resource. For directories, this is `server`. 
+3. `contents`: A list containing this format
+4. `owner`: The owner of the resource. For directories, this is `server`. 
 
 Note that the first entry in the data is the `root` directory.
 
