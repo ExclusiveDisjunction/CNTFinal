@@ -18,6 +18,7 @@ class MessageType(Enum):
     Connect = "connect"
     Close = "close"
     Ack = "ack"
+    Size = "size"
     Upload = "upload"
     Download = "download"
     Delete = "delete"
@@ -114,6 +115,8 @@ class MessageBasis:
                     return CloseMessage.parse(data, req)
                 case MessageType.Ack:
                     return AckMessage.parse(data, req)
+                case MessageType.Size:
+                    return SizeMessage.parse(data, req)
                 case MessageType.Upload:
                     return UploadMessage.parse(data, req)
                 case MessageType.Download:
@@ -207,6 +210,26 @@ class CloseMessage(MessageBasis):
             raise ValueError("Close message has no response variant")
 
         return CloseMessage()
+    
+class SizeMessage(MessageBasis):
+    """
+    A message that transmits the size needed to send the next message
+    """
+    def __init__(self, size: int):
+        self.__size = size
+
+    def message_type(self) -> MessageType:
+        return MessageType.Size
+    def data(self) -> dict:
+        return {
+            "size": self.__size
+        }
+    def data_response(self) -> dict:
+        return self.data()
+    
+    def size(self) -> int:
+        return self.__size
+    
 
 class UploadMessage(MessageBasis):
     def __init__(self, name: str, kind: FileType, size: int):
