@@ -4,7 +4,17 @@ from typing import Self
 
 from Server.server_path import DirectoryInfo, FileType
 
+"""
+
+This module handles the encoding/decoding of client/server messages to and from JSON formats. It conforms to the format.md file provided. 
+
+"""
+
 class MessageType(Enum):
+    """
+    Describes the type of message & its short hand used in the file
+    """
+
     Connect = "connect"
     Close = "close"
     Ack = "ack"
@@ -16,11 +26,21 @@ class MessageType(Enum):
     Subfolder = "subfolder"
 
 class MessageBasis:
+    """
+    A base class that provides the functionality of the other Message classes
+    """
+
     def message_type(self) -> MessageType:
         raise NotImplementedError()
     def data(self) -> dict:
+        """
+        Returns the data member of the message, if the mode is 'request'
+        """
         return {}
     def data_response(self) -> dict:
+        """
+        Returns the data member of the message, if the mode is 'response'
+        """
         return {}
     
     def __eq__(self, other: Self) -> bool:
@@ -30,6 +50,9 @@ class MessageBasis:
             return False
     
     def construct_message_json(self, request: bool = True) -> str:
+        """
+        Encodes the message as a JSON file.
+        """
         if request:
             direction_str = "request"
         else:
@@ -51,13 +74,18 @@ class MessageBasis:
 
         return json.dumps(result)
     
-    def parse_from_json(message: str) -> Self:
+    def parse_from_json(message: str) -> Self | None:
+        """
+        Converts a JSON encoded string back into a specified Message type. Upon error, it will return None
+        """
         try:
             decoded = json.loads(message)
         except:
             return None
 
         try:
+            # Extract the basic information out of the file
+
             msg_type = MessageType(decoded["convention"])
 
             req_raw = decoded["direction"]
@@ -77,6 +105,7 @@ class MessageBasis:
         if msg_type == None or req == None or data == None:
             return None
         
+        # We will use the different classes parsers to finish decoding
         try:
             match msg_type:
                 case MessageType.Connect:

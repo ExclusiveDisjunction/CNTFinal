@@ -1,10 +1,8 @@
 from Common.message_handler import *
 
-if __name__ == "__main__":
+def messages_tester() -> bool:
     """
-
     We will evaluate all kinds of messages. It will start by constructing an instance of that Message (request and response variants, if possible), and then sterilize into JSON. Then, it will de-sterilize, parse, and assert the two are equal.
-
     """
 
     messages = [
@@ -31,3 +29,9 @@ if __name__ == "__main__":
 
     except Exception as e:
         print(f"Caught {str(e)}")
+
+if __name__ == "__main__":
+    if messages_tester():
+        print("\nAll tests passed")
+    else:
+        print("\nOne or more tests failed")

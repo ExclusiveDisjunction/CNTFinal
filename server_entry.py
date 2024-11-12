@@ -1,4 +1,4 @@
-import pool
+import Server.pool as pool
 
 threadPool = pool.ThreadPool()
 
