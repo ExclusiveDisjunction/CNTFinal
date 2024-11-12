@@ -1,0 +1,8 @@
+{
+    "convention": "greet",
+    "direction": "request",
+    "data": {
+        "username": "string",
+        "password": "hashed string"
+    }
+}

@@ -1,0 +1,7 @@
+{
+    "convention": "download",
+    "direction": "request",
+    "data" : {
+        "path": "string"
+    }
+}

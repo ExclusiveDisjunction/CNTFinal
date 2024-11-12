@@ -1,0 +1,7 @@
+{
+    "convention": "move",
+    "direction": "request",
+    "data": {
+        "path": "relative path"
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "convention": "download",
+    "direction": "response",
+    "data": {
+        "status": "200 | 403 | 401 | 404",
+        "message": "string",
+        "format": {
+            "kind": "text | video | audio",
+            "size": "int"
+        }
+    }
+}

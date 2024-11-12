@@ -1,0 +1,9 @@
+{
+    "convention": "upload",
+    "direction": "request",
+    "data": {
+        "name": "string",
+        "kind": "audio | video | text",
+        "size": "int"
+    }
+}
