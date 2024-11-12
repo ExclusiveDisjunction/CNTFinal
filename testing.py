@@ -50,7 +50,7 @@ def messages_tester() -> bool:
         print(f"Caught {str(e)}")
 
 def dir_resp_test() -> bool:
-    creds = Credentials("Hi", "dasldkfjsalkdjf")
+    creds = "Hi"
     root = DirectoryInfo("", 
         [
             FileInfo("thing.wav", creds, FileType.Audio),
@@ -66,13 +66,11 @@ def dir_resp_test() -> bool:
                 DirectoryInfo("two", [], [])
             ])
         ])
-    
-    root.correct_path(None, True)
     encoded = json.dumps(root.to_dict())
     print(encoded, end="\n\n")
     
     decoded = DirectoryInfo.from_dict(json.loads(encoded))
-    print(json.dumps(decoded.to_dict()))
+    assert root == decoded
     print("\nSucessfully decoded")
 
 
