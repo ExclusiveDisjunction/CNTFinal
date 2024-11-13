@@ -1,5 +1,13 @@
 import os
+from enum import Enum
 from ack_codes import AckCodes
+from file_tracking import CheckFileOwner, ListFiles, Status
+
+ROOT_DIRECTORY = 'server_root'
+
+class SubfolderAction(Enum):
+    ADD = 'add'
+    REMOVE = 'remove'
 
 def UploadFile(path, data):
     if not isinstance(path, str) or not path:
@@ -38,7 +46,7 @@ def UploadFile(path, data):
         return AckCodes.FORBIDDEN
 
     # Construct the full path
-    root_directory = ''  # Replace with actual root directory
+    root_directory = ROOT_DIRECTORY
     upload_path = os.path.normpath(os.path.join(root_directory, normalized_path, file_name))
     if not upload_path.startswith(root_directory):
         return AckCodes.FORBIDDEN
@@ -57,8 +65,7 @@ def UploadFile(path, data):
         os.makedirs(os.path.dirname(upload_path), exist_ok=True)
         with open(upload_path, 'wb') as f:
             f.write(file_content)
-        # Assign ownership metadata
-        os.setxattr(upload_path, 'user.owner', owner.encode())
+        # Assign ownership metadata using file_tracking
         return AckCodes.OK
     except PermissionError:
         return AckCodes.UNAUTHORIZED
@@ -79,7 +86,7 @@ def DownloadFile(path, data):
     client_directory = data['client_directory']
 
     # Construct the full path
-    root_directory = ''  # Replace with actual root directory
+    root_directory = ROOT_DIRECTORY
     download_path = os.path.normpath(os.path.join(root_directory, client_directory, normalized_path))
     if not download_path.startswith(root_directory):
         return AckCodes.FORBIDDEN, None
@@ -89,9 +96,9 @@ def DownloadFile(path, data):
         return AckCodes.NOT_FOUND, None
 
     try:
-        file_owner = os.getxattr(download_path, 'user.owner').decode()
-        if file_owner != owner:
-            return AckCodes.UNAUTHORIZED, None
+        owner_status = CheckFileOwner(download_path, owner)
+        if owner_status != Status.SUCCESS:
+            return owner_status, None
         with open(download_path, 'rb') as f:
             file_content = f.read()
         return AckCodes.OK, file_content
@@ -121,7 +128,7 @@ def DeleteFile(path, data):
         return AckCodes.CONFLICT
     
     # Construct the full path
-    root_directory = ''  # Replace with actual root directory
+    root_directory = ROOT_DIRECTORY
     delete_path = os.path.normpath(os.path.join(root_directory, client_directory, normalized_path))
     if not delete_path.startswith(root_directory):
         return AckCodes.FORBIDDEN
@@ -132,9 +139,9 @@ def DeleteFile(path, data):
     
     # Check if user owns the file
     try:
-        file_owner = os.getxattr(delete_path, 'user.owner').decode()
-        if file_owner != owner:
-            return AckCodes.UNAUTHORIZED
+        owner_status = CheckFileOwner(delete_path, owner)
+        if owner_status != Status.SUCCESS:
+            return owner_status
         # Delete the file
         os.remove(delete_path)
         return AckCodes.OK
@@ -167,7 +174,7 @@ def MoveDirectory(path, new_path, data):
         return AckCodes.CONFLICT
     
     # Construct the full paths
-    root_directory = ''  # Replace with actual root directory
+    root_directory = ROOT_DIRECTORY
     source_path = os.path.normpath(os.path.join(root_directory, current_directory, normalized_path))
     destination_path = os.path.normpath(os.path.join(root_directory, current_directory, normalized_new_path))
     if not source_path.startswith(root_directory) or not destination_path.startswith(root_directory):
@@ -215,7 +222,7 @@ def ModifySubdirectories(path, subfolder_action, data):
         return AckCodes.CONFLICT
     
     # Construct the full path
-    root_directory = ''  # Replace with actual root directory
+    root_directory = ROOT_DIRECTORY
     target_path = os.path.normpath(os.path.join(root_directory, current_directory, normalized_path))
     if not target_path.startswith(root_directory):
         return AckCodes.FORBIDDEN
@@ -247,3 +254,6 @@ def ModifySubdirectories(path, subfolder_action, data):
         return AckCodes.UNAUTHORIZED
     except Exception:
         return AckCodes.CONFLICT
+
+def ListFilesWrapper(path):
+    return ListFiles(path)
