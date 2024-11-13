@@ -102,7 +102,7 @@ def connection_proc(conn: ConnectionCore) -> None:
         conn.drop()
         return
 
-    conn_msg = MessageBasis.parse_from_json(contents)
+    conn_msg = MessageBasis.parse_from_json(contents.decode())
     if conn_msg is None or not isinstance(conn_msg, ConnectMessage):
         print(f"[{conn.addr()}] Invalid format, the connection message was invalid or not received")
         conn.unlock()
@@ -110,6 +110,9 @@ def connection_proc(conn: ConnectionCore) -> None:
         return
     
     conn.set_cred( Credentials(conn_msg.username(), conn_msg.passwordHash()) )
+    conn.set_path("")
+
+    conn.conn().send(AckMessage(200, "OK").construct_message_json())
     conn.unlock()
 
     last_was = None
@@ -125,6 +128,8 @@ def connection_proc(conn: ConnectionCore) -> None:
             conn.unlock()
             conn.drop()
             return
+        
+        contents = contents.decode()
         
         # We need to treat this as a file, not a message
         if last_was_ok and last_was == MessageType.Upload:
