@@ -37,7 +37,8 @@ The client sends this message.
 
 This one has two parts, request and response. The client starts this message.
 1. Client sends a `dir` request message
-2. The server sends back a `dir` response message
+2. Server sends a `size` message containing the size of the next `dir` response message
+3. The server sends back a `dir` response message
 
 ## Download
 
