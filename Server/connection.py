@@ -162,40 +162,36 @@ def connection_proc(conn: ConnectionCore) -> None:
                 name, kind, size = message.name(), message.kind(), message.size()
                 # Pass to the IO model
                 can_send = True # Dummy value
-                error_value = (401, "Unauthorized") # Dummy value
+                code, message = (401, "Unauthorized") # Dummy value
 
-                if can_send:
-                    responses.append(AckMessage(100, "Send file"))
-                else:
-                    responses.append(AckMessage(error_value[0], error_value[2]))
+                responses.append(AckMessage(code, message))
 
             case MessageType.Download:
                 path = message.path()
                 
                 # We need to validate the request with the IO model
                 can_send = True
-                error = (401, "Unauthorized") # Both dummy values
-                file_info = (FileType.Text, 200)
-                file = "Dummy file contents"
+                code, message = (401, "Unauthorized") # Both dummy values
+                file_type, file_size = (FileType.Text, 200) # Expects None, None if code is an error code
+                file_contents = "Dummy file contents"
+
+                responses.append(DownloadMessage(code, message, file_type, file_size))
 
                 if can_send:
-                    responses.append(DownloadMessage(200, "OK", file_info[0], file_info[1]))
-                    responses.append(file)
-                else:
-                    responses.append(DownloadMessage(error[0], error[1], None, None))
+                    responses.append(file_contents)
 
             case MessageType.Delete:
                 path = message.path()
 
                 # Validate request with IO model
-                status = (200, "OK")
-                responses.append(AckMessage(status[0], status[1]))
+                code, message = (200, "OK")
+                responses.append(AckMessage(code, message))    
 
             case MessageType.Dir:
                 # Get directory info from backend
                 try:
-                    info = DirectoryInfo("") # Dummy
-                    dir_resp = DirMessage(200, "OK", info, conn.path())
+                    code, message, info = 200, "OK", DirectoryInfo("") # Dummy
+                    dir_resp = DirMessage(code, message, info, conn.path())
                     size = len(dir_resp.construct_message_json())
 
                     responses.append(SizeMessage(size))
@@ -208,16 +204,15 @@ def connection_proc(conn: ConnectionCore) -> None:
                 path = message.path()
 
                 # Validate request with IO model
-                status = (200, "OK")
-                responses.append(AckMessage(status[0], status[1]))    
+                code, message = (200, "OK")
+                responses.append(AckMessage(code, message))    
             
             case MessageType.Subfolder:
                 path, action = message.path(), message.action()
 
                 # Validate request with IO model
-                status = (200, "OK")
-                responses.append(AckMessage(status[0], status[1]))
-                
+                code, message = (200, "OK")
+                responses.append(AckMessage(code, message))    
 
         if responses is not None and len(responses) != 0:
             for response in responses:
