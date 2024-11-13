@@ -2,6 +2,7 @@ import tkinter as tk
 import socket
 from tkinter import font as tkFont
 from tkinter import messagebox
+import bcrypt
 
 class FileSharingApp(tk.Tk):
     def __init__(self):
@@ -172,16 +173,29 @@ class ConnectPage(Page):
         self.username = ""
         self.password = ""
 
+    def hash_password(plain_password):
+        salt = bcrypt.gensalt()
+        hashed_password = bcrypt.hashpw(plain_password.encode(), salt)
+        return hashed_password
+
     def validate_login(self):
         self.username = self.username_entry.get()
         self.password = self.password_entry.get()
 
+        hashed_password = self.hash_password(self.password)
+
+
+
         # psuedocode
-        #run create_connection
-        # check backend validation of username and password
-        # if valid
-        #   on success, go to My Files page
-        # else, display error message
+        # connection is already made with server... done on initailization
+        # user inputs login creditions
+        # password is hashed
+        
+        # send username and hashed password to server, validate credentials
+        # if valid,
+        #  go to My Files page
+        # else
+        #  show error message
 
     def create_connection(self, ip_address, port):
         raise NotImplementedError("Subclasses should implement this method.")
@@ -220,6 +234,7 @@ class ConnectPage(Page):
 
         self.login_button = tk.Button(self, text="Login", font=("Figtree", 14), bg=self.button_color, fg=self.text_color, command=self.validate_login)
         self.login_button.pack(pady=10)
+
 
 
 if __name__ == "__main__":
