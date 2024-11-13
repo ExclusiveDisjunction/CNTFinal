@@ -3,6 +3,7 @@ import socket
 from tkinter import font as tkFont
 from tkinter import messagebox
 import bcrypt
+from Common import message_handler
 
 class FileSharingApp(tk.Tk):
     def __init__(self):
@@ -23,6 +24,7 @@ class FileSharingApp(tk.Tk):
         self.button_hover_color = "#A569BD"
         self.text_color = "white"
         self.online_color = "lime"
+        self.offline_color = "red"
 
         # initialize UI elements
         self.current_page = None
@@ -47,9 +49,9 @@ class FileSharingApp(tk.Tk):
 
         self.status_label = tk.Label(
             self.sidebar,
-            text="Status: Online",
+            text="Status: ...",
             font=("Figtree", 14),
-            fg="lime",
+            fg="gray",
             bg=self.sidebar_color
         )
         self.status_label.pack(pady=20)
@@ -104,6 +106,14 @@ class FileSharingApp(tk.Tk):
         self.current_button = self.buttons[button]
         self.current_button.config(bg=self.button_hover_color)
         command()
+
+    def status_update(self, status):
+        if status == "Online":
+            self.status_label.config(fg=self.online_color)
+            self.status_label.config(text=f"Status: {status}")
+        else:
+            self.status_label.config(fg=self.offline_color)
+            self.status_label.config(text=f"Status: {status}")
 
 class Page(tk.Frame):
     def __init__(self, parent, bg_color, text_color, button_color):
@@ -173,7 +183,7 @@ class ConnectPage(Page):
         self.username = ""
         self.password = ""
 
-    def hash_password(plain_password):
+    def hash_password(self, plain_password):
         salt = bcrypt.gensalt()
         hashed_password = bcrypt.hashpw(plain_password.encode(), salt)
         return hashed_password
@@ -181,10 +191,16 @@ class ConnectPage(Page):
     def validate_login(self):
         self.username = self.username_entry.get()
         self.password = self.password_entry.get()
-
         hashed_password = self.hash_password(self.password)
 
+        message_handler.ConnectMessage(self.username, hashed_password)
+    
 
+        if self.username == user and self.password == passW:
+            self.master.show_my_files()
+            self.master.status_update("Online")
+        else:
+            messagebox.showerror("Error", "Invalid username or password.")
 
         # psuedocode
         # connection is already made with server... done on initailization
@@ -204,6 +220,7 @@ class ConnectPage(Page):
 
         # try:
         #     client_socket.connect(server_address)
+        #     login_message = ConnectMessage(self.username, self.password)
         #     login_message = f"LOGIN {self.username} {self.password}" # however the format is
         #     client_socket.send(login_message.encode())
 
