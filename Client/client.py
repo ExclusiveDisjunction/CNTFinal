@@ -1,7 +1,7 @@
 import tkinter as tk
+import socket
 from tkinter import font as tkFont
-from PIL import Image, ImageTk, ImageFont
-import os
+from tkinter import messagebox
 
 class FileSharingApp(tk.Tk):
     def __init__(self):
@@ -177,13 +177,27 @@ class ConnectPage(Page):
         self.password = self.password_entry.get()
 
         # psuedocode
+        #run create_connection
         # check backend validation of username and password
-        # if valid, run create_connection
+        # if valid
         #   on success, go to My Files page
         # else, display error message
 
     def create_connection(self, ip_address, port):
-        print(f"Connecting to {ip_address} on port {port}")
+        raise NotImplementedError("Subclasses should implement this method.")
+        # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # server_address = (ip_address, port)
+
+        # try:
+        #     client_socket.connect(server_address)
+        #     login_message = f"LOGIN {self.username} {self.password}" # however the format is
+        #     client_socket.send(login_message.encode())
+
+        #     response = client_socket.recv(1024).decode()
+        #     if "SUCCESS" in response:
+        #         self.master.show_my_files()
+        #     else:
+        #         messagebox.showerror("Error", "Invalid username or password.")
 
     def load_content(self):
 
