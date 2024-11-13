@@ -230,7 +230,6 @@ class SizeMessage(MessageBasis):
     def size(self) -> int:
         return self.__size
     
-
 class UploadMessage(MessageBasis):
     def __init__(self, name: str, kind: FileType, size: int):
         self.__name = name
@@ -273,6 +272,10 @@ class UploadMessage(MessageBasis):
 
 class DownloadMessage(MessageBasis):
     def __init__(self, *args):
+        """
+        If the arguments contains one element, it expects the path for a request. If it contains 4 elements, it expects the status code, message, file kind, and file size. The file kind and file size must either be a value, or none. It cannot be a mixed state.
+        """
+
         if len(args) == 1:
             self.__path = args[0]
             self.__is_response = False
