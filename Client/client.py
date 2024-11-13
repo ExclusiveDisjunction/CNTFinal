@@ -30,7 +30,7 @@ class FileSharingApp(tk.Tk):
         self.create_sidebar()
         self.create_pages()
 
-        self.show_page("My Files")
+        self.show_page("Connect")
 
     def create_sidebar(self):
         self.sidebar = tk.Frame(self, width=200, bg=self.sidebar_color)
@@ -118,12 +118,11 @@ class Page(tk.Frame):
         else:
             print(f"Loading content for {self.__class__.__name__} page.")
         self.content_loaded = True
-        # Implement specific content loading logic here
         self.create_content()
 
     def reset_content(self):
         for widget in self.winfo_children():
-            widget.destroy()  # Remove all widgets from the page
+            widget.destroy()
 
     def create_content(self):
        
@@ -134,7 +133,7 @@ class MyFilesPage(Page):
         super().__init__(parent, bg_color, text_color, button_color)
 
     def create_content(self):
-        label = tk.Label(self, text="Here are my files:", font=("Figtree", 24), fg=self.text_color, bg=self.bg_color)
+        label = tk.Label(self, text="My Files:", font=("Figtree", 24), fg=self.text_color, bg=self.bg_color)
         label.pack(pady=20)
         file_list = tk.Listbox(self, height=10, width=40)
         file_list.insert(tk.END, "File 1")
@@ -170,15 +169,44 @@ class SettingsPage(Page):
 class ConnectPage(Page):
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
+        self.username = ""
+        self.password = ""
 
-    def validate_login(self, username, password):
-        print(f"Logging in with username: {username} and password: {password}")
+    def validate_login(self):
+        self.username = self.username_entry.get()
+        self.password = self.password_entry.get()
+
+        # psuedocode
+        # check backend validation of username and password
+        # if valid, run create_connection
+        #   on success, go to My Files page
+        # else, display error message
 
     def create_connection(self, ip_address, port):
         print(f"Connecting to {ip_address} on port {port}")
 
     def load_content(self):
-        raise NotImplementedError("load_content() must be implemented by subclasses")
+
+        self.reset_content()
+
+        label = tk.Label(self, text="Please Login:", font=("Figtree", 24), fg=self.text_color, bg=self.bg_color)
+        label.pack(pady=20)
+
+        self.username_label = tk.Label(self, text="Username:", font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
+        self.username_label.pack(pady=10)
+
+        self.username_entry = tk.Entry(self, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
+        self.username_entry.pack(pady=10)
+
+        self.password_label = tk.Label(self, text="Password:", font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
+        self.password_label.pack(pady=10)
+
+        self.password_entry = tk.Entry(self, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color, show="*")
+        self.password_entry.pack(pady=10)
+
+        self.login_button = tk.Button(self, text="Login", font=("Figtree", 14), bg=self.button_color, fg=self.text_color, command=self.validate_login)
+        self.login_button.pack(pady=10)
+
 
 if __name__ == "__main__":
     app = FileSharingApp()
