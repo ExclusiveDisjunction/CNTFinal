@@ -193,8 +193,6 @@ class ConnectPage(Page):
         self.password = self.password_entry.get()
         hashed_password = self.hash_password(self.password)
 
-        message_handler.ConnectMessage(self.username, hashed_password)
-    
 
         if self.username == user and self.password == passW:
             self.master.show_my_files()
@@ -214,21 +212,22 @@ class ConnectPage(Page):
         #  show error message
 
     def create_connection(self, ip_address, port):
-        raise NotImplementedError("Subclasses should implement this method.")
-        # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # server_address = (ip_address, port)
-
-        # try:
-        #     client_socket.connect(server_address)
-        #     login_message = ConnectMessage(self.username, self.password)
-        #     login_message = f"LOGIN {self.username} {self.password}" # however the format is
-        #     client_socket.send(login_message.encode())
-
-        #     response = client_socket.recv(1024).decode()
-        #     if "SUCCESS" in response:
-        #         self.master.show_my_files()
-        #     else:
-        #         messagebox.showerror("Error", "Invalid username or password.")
+        con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        con.connect((ip_address, port))
+        contents = con.recv(1024).decode()
+        if contents == "":
+            return
+        
+        message = message_handler.MessageBasis.parse_from_json(contents)
+        if isinstance(message, message_handler.AckMessage):
+            code, server_message = message.code(), message.message()
+            if code != 200:
+                print(f"Error: {server_message}")
+                return
+            else:
+                # handle unexpected error
+                print("Unexpected error occurred")
+                con.close()
 
     def load_content(self):
 
