@@ -58,3 +58,10 @@ This is started with the client.
 This is started with the client.
 1. Client sends a `subfolder` request
 2. Server validates request and sends back an `ack`.
+
+## Upload
+
+This is started with the client.
+1. Client sends a `upload` request
+2. Server validates request and sends back an `ack`.
+3. If ok, client sends the file
