@@ -1,9 +1,12 @@
+import threading
+import time
 import tkinter as tk
 import socket
 from tkinter import font as tkFont
 from tkinter import messagebox
 import bcrypt
-from Common import message_handler
+from Common.message_handler import MessageBasis, AckMessage, ConnectMessage
+import json
 
 class FileSharingApp(tk.Tk):
     def __init__(self):
@@ -182,6 +185,11 @@ class ConnectPage(Page):
         super().__init__(parent, bg_color, text_color, button_color)
         self.username = ""
         self.password = ""
+        self.con = None
+        self.server_ip = "127.0.0.1"
+        self.server_port = 8081
+        self.load_content()
+        self.create_connection()
 
     def hash_password(self, plain_password):
         salt = bcrypt.gensalt()
@@ -193,41 +201,42 @@ class ConnectPage(Page):
         self.password = self.password_entry.get()
         hashed_password = self.hash_password(self.password)
 
+        connect_message = ConnectMessage(username=self.username, passwordHash=hashed_password.decode())
+        try:
+            connect_message_json = connect_message.construct_message_json()
+            self.con.sendall(connect_message_json.encode())
 
-        if self.username == user and self.password == passW:
-            self.master.show_my_files()
-            self.master.status_update("Online")
-        else:
-            messagebox.showerror("Error", "Invalid username or password.")
-
-        # psuedocode
-        # connection is already made with server... done on initailization
-        # user inputs login creditions
-        # password is hashed
-        
-        # send username and hashed password to server, validate credentials
-        # if valid,
-        #  go to My Files page
-        # else
-        #  show error message
-
-    def create_connection(self, ip_address, port):
-        con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        con.connect((ip_address, port))
-        contents = con.recv(1024).decode()
-        if contents == "":
-            return
-        
-        message = message_handler.MessageBasis.parse_from_json(contents)
-        if isinstance(message, message_handler.AckMessage):
-            code, server_message = message.code(), message.message()
-            if code != 200:
-                print(f"Error: {server_message}")
+            contents = self.con.recv(1024).decode()
+            if contents == "":
+                messagebox.showerror("Error", "Invalid credentials.")
                 return
+            
+            message = MessageBasis.parse_from_json(contents)
+            if isinstance(message, AckMessage):
+                code, server_message = message.code(), message.message()
+                if code != 200:
+                    messagebox.showerror("Error", server_message)
+                else:
+                    self.parent.show_page("My Files")
+                    self.parent.status_update("Online")
             else:
-                # handle unexpected error
-                print("Unexpected error occurred")
-                con.close()
+                messagebox.showerror("Error", "Unexpected error occurred.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error: {e}")
+        finally:
+            if self.con:
+                self.con.close()
+
+    def create_connection(self):
+        try:
+            self.con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.con.connect((self.server_ip, self.server_port))
+            self.master.status_update("Online")
+        except Exception as e:
+            print(f"Error: {e}")
+            if self.con:
+                self.con.close()
+            self.master.status_update("Offline")
 
     def load_content(self):
 
