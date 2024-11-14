@@ -1,13 +1,23 @@
-from file_io import UploadFile, DownloadFile, DeleteFile, MoveDirectory, ModifySubdirectories, ListFilesWrapper
+from file_io import UploadFile, DownloadFile, DeleteFile, MoveDirectory, ModifySubdirectories, ListFilesWrapper, GetFileSize
 from file_tracking import CheckFileOwner, GetDirectoryStructure, Status
 from directory_info import DirectoryInfo, FileInfo
-from ack_codes import AckCodes, GenerateAckMessage
+from ack_codes import AckCodes
+from exceptions import *
 
 def ProcessUploadRequest(data):
-    # Validate and initiate file upload requests
-    path = data.get('path')
-    result = UploadFile(path, data)
-    return {"status": result.name}
+    try:
+        UploadFile(data.get('path'), data)
+        return {"status": AckCodes.OK.name}
+    except FileExistsError:
+        return {"status": AckCodes.FILE_ALREADY_EXISTS.name}
+    except PathInvalidError:
+        return {"status": AckCodes.FORBIDDEN.name}
+    except UnauthorizedError:
+        return {"status": AckCodes.UNAUTHORIZED.name}
+    except ConflictError:
+        return {"status": AckCodes.CONFLICT.name}
+    except Exception:
+        return {"status": AckCodes.CONFLICT.name}
 
 def ProcessDownloadRequest(data):
     # Handle download requests, returning appropriate errors if conditions aren’t met
@@ -45,3 +55,18 @@ def ProcessModifyRequest(data):
     subfolder_action = data.get('subfolder_action')
     result = ModifySubdirectories(path, subfolder_action, data)
     return {"status": result.name}
+
+def ProcessSizeRequest(data):
+    try:
+        size = GetFileSize(data.get('path'), data)
+        return {"status": AckCodes.OK.name, "size": size}
+    except NotFoundError:
+        return {"status": AckCodes.NOT_FOUND.name}
+    except PathInvalidError:
+        return {"status": AckCodes.FORBIDDEN.name}
+    except UnauthorizedError:
+        return {"status": AckCodes.UNAUTHORIZED.name}
+    except ConflictError:
+        return {"status": AckCodes.CONFLICT.name}
+    except Exception:
+        return {"status": AckCodes.CONFLICT.name}
