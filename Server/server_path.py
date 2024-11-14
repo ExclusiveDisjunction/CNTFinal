@@ -3,6 +3,16 @@ from typing import Self
 from pathlib import Path
 import os
 
+from credentials import Credentials
+
+class Status(Enum):
+    FILE_NOT_FOUND = 'File not found'
+    PATH_INVALID = 'Path invalid'
+    UNAUTHORIZED = 'Unauthorized'
+    SUCCESS = 'Success'
+
+root_directory = Path.home() / "cnt"
+
 class FileType(Enum):
     Text = "text"
     Audio = "audio"
@@ -13,7 +23,7 @@ class FileInfo:
     A structure that contains the path & allows for relative moving
     """
 
-    def __init__(self, name: str | str, owner_username, kind: FileType, parent = None):
+    def __init__(self, name: str | str, owner_username, kind: FileType, size: int, parent = None):
         self.__parent = parent
         self.__name = name
         self.__owner = owner_username
@@ -40,8 +50,7 @@ class FileInfo:
             raise ValueError("The dictionary does not contain enough data to fill this structure")
         
         return FileInfo(name, owner, file_kind, parent)
-        
-    
+          
     def __eq__(self, other) -> bool:
         if self is None and other is None:
             return True
@@ -56,12 +65,6 @@ class FileInfo:
         return self.__kind
     def owner_username(self) -> str:
         return self.__owner
-    def get_size(self, env_path: Path) -> int | None: 
-        path = self.target_path_absolute(env_path)
-        if path is None or not path.exists():
-            return None
-        
-        return os.path.getsize(self.__path)
     def parent(self):
         return self.__parent
     def set_parent(self, parent):
@@ -84,39 +87,23 @@ class FileInfo:
         return env_path.joinpath(self.target_path_relative())
 
 class DirectoryInfo:
-    def __init__(self, name: str, files: list[FileInfo] | None = None, dirs: list[Self] | None = None, parent: Self | None = None):
+    def __init__(self, name: str, contents: list[FileInfo | Self] | None = None, parent: Self | None = None):
         self.__name = name
-        if files is None:
-            self.__files = []
-        else:
-            self.__files = files
-
-        if dirs is None:
-            self.__dirs = []
-        else:
-            self.__dirs = dirs
+        if contents is None:
+            self.__contents = []
 
         self.__parent = parent
 
         # Build proper order
-        for file in self.__files:
-            if file is not None:
-                file.set_parent(self)
-        for dir in self.__dirs:
-            if dir is not None:
-                dir.set_parent(self)
+        for content in contents:
+            if content is not None:
+                content.set_parent(self)
 
     def to_dict(self) -> dict:
-        contents = []
-        for dir in self.__dirs:
-            contents.append(dir.to_dict())
-        for file in self.__files:
-            contents.append(file.to_dict())
-
         return {
             "kind": "directory",
             "name": self.__name,
-            "contents": contents
+            "contents": self.__contents
         } 
     def from_dict(data: dict) -> Self | None:
         try:
@@ -129,15 +116,14 @@ class DirectoryInfo:
         if name == None or contents == None:
             raise ValueError("The contents could not be read")
         
-        files = []
-        dirs = []
+        trueContents = []
         for info in contents:
             if info["kind"] == "directory":
-                dirs.append(DirectoryInfo.from_dict(info))
+                trueContents.append(DirectoryInfo.from_dict(info))
             elif info["kind"] == "file":
-                files.append(FileInfo.from_dict(info))
+                trueContents.append(FileInfo.from_dict(info))
 
-        return DirectoryInfo(name, files, dirs)
+        return DirectoryInfo(name, trueContents)
     
     def __eq__(self, other) -> bool:
         if other is None and self is None:
@@ -170,7 +156,132 @@ class DirectoryInfo:
         """
         return env_path.joinpath(self.target_path_relative())
         
-    def get_child_directories(self) -> list[Self] | None:
-        return self.__dirs
-    def get_child_files(self) -> list[FileInfo] | None:
-        return self.__files
+    def add_content(self, content):
+        self.__contents.append(content)
+    def contents(self):
+        return self.__contents
+    def set_contents(self, contents: list[Self | FileInfo] | None):
+        if contents is None:
+            self.__contents = []
+        else:
+            self.__contents = contents
+
+# Directory Managment
+def contents_to_list(path: Path) -> list[DirectoryInfo | FileInfo]:
+    result = []
+
+    for entry in os.listdir(path):
+        try:
+
+            full_path = (path / entry).resolve()
+            if full_path.is_dir():
+                target = DirectoryInfo(entry)
+                target.set_contents(contents_to_list(full_path))
+
+                result.append(target)
+            elif full_path.is_file():
+                result.append(
+                    FileInfo(entry, get_file_owner(full_path), get_file_type(full_path), get_file_size(full_path))
+                )
+        except:
+            continue
+
+    return result
+
+def create_directory_info() -> DirectoryInfo:
+    global root_directory
+
+    result = DirectoryInfo("root")
+
+    result.set_contents(contents_to_list(root_directory))
+
+# Path Management
+def move_relative(raw_path: str, curr_dir: Path) -> Path | None:
+    """
+    Moves to the raw_path relative to the curr_dir. It returns the absolute path.
+    """
+    if raw_path is None or curr_dir is None:
+        return None
+    
+    path = Path(raw_path)
+    if path.is_absolute():
+        return None
+    
+    new_path = curr_dir.joinpath(path)
+    return new_path.resolve()
+
+def make_relative(path: Path) -> Path | None:
+    """
+    Determines the absolute path as a relative one. It is relative to the root_directory.
+    """
+    global root_directory
+    
+    if not is_path_valid(path):
+        return None
+    
+    return remove_from_front_path(path, len(root_directory.parts))
+
+def remove_from_front_path(path: Path, n_remove: int) -> Path | None:
+    """
+    Removes a specified number of elements from the start of a path
+    """
+    if path is None or n_remove < 0 or n_remove >= len(path.parts):
+        return None
+    
+    extracted = path.parts[n_remove:]
+    return Path('/'.join(extracted))
+
+def is_path_valid(path: Path) -> bool:
+    """
+    Determines if a path lives inside of the root_directory. 
+    """
+    global root_directory
+
+    target_size = len(root_directory.parts)
+    if len(path.parts) < target_size:
+        return False
+    
+    return path.parts[0:target_size] == root_directory.parts
+
+# File management
+def get_file_owner(path) -> str:
+    try:
+        return os.getxattr(path, 'user.owner').decode()
+    except (OSError, AttributeError):
+        return None
+    
+def set_file_owner(path, owner: Credentials) -> bool:
+    try:
+        os.setxattr(path, 'user.owner', owner.getUsername().encode())
+        return True
+    
+    except (OSError, AttributeError):
+        return False  
+    
+def is_file_owner(path: Path, user: Credentials) -> bool:
+    if path is None or user is None or not path.exists():
+        return False
+
+    file_owner = get_file_owner(path)
+    return file_owner == user.getUsername()
+    
+def get_file_type(path: Path) -> FileType | None:
+    if path is None:
+        return None
+    
+    match path.suffix:
+        case (".mp4", ".mov", ".avi", ".wmv"):
+            return FileType.Video
+        case (".mp3", ".wav", ".aac", ".flac", ".aiff"):
+            return FileType.Audio
+        case _:
+            return FileType.Text
+        
+def get_file_size(path: Path) -> int | None:
+    if path is None or not path.is_file():
+        return None
+    
+    try:
+        return os.path.getsize(path)
+    except:
+        return None

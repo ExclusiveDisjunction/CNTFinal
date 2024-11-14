@@ -1,78 +1,59 @@
 import os
 from enum import Enum
-from ack_codes import AckCodes
-from file_tracking import CheckFileOwner, ListFiles, Status
-from exceptions import *
+from Server.http_codes import *
 
-ROOT_DIRECTORY = 'server_root'
+from pathlib import Path
 
-class SubfolderAction(Enum):
-    ADD = 'add'
-    REMOVE = 'remove'
+from credentials import Credentials
+from server_path import FileType, move_relative, is_path_valid, is_file_owner, get_file_type, get_file_size
+from ..Common.message_handler import SubfolderAction
 
-def UploadFile(path, data):
-    if not isinstance(path, str) or not path:
-        return AckCodes.NOT_FOUND
+class UploadHandle:
+    def __init__(self, path: Path, owner: Credentials):
+        self.path = path
+        self.owner = owner
 
-    # Ensure all required fields are present
-    required_fields = ['name', 'file_name', 'kind', 'owner', 'client_directory', 'file_content']
-    for field in required_fields:
-        if field not in data:
-            return AckCodes.CONFLICT
+def RequestUpload(path: Path, curr_user: Credentials) -> UploadHandle | HTTPErrorBasis: 
+    if path is None or curr_user is None or not path.exists() or not path.is_file():
+        return NotFoundError()
 
-    # Assign variables
-    name = data['name']
-    file_name = data['file_name']
-    file_type = data['kind']
-    owner = data['owner']
-    client_directory = data['client_directory']
-    file_content = data['file_content']
+    if not is_path_valid(path):
+        return ForbiddenError()
 
-    # Construct the absolute path
-    absolute_path = os.path.abspath(os.path.join(ROOT_DIRECTORY, client_directory, path, file_name))
-
-    # Ensure the absolute path is within the root directory
-    if not absolute_path.startswith(os.path.abspath(ROOT_DIRECTORY)):
-        return AckCodes.FORBIDDEN
-
-    # Check if file already exists
-    if os.path.exists(absolute_path):
-        return AckCodes.FILE_ALREADY_EXISTS
-    
-    # After checking if file already exists
-    if os.path.isdir(absolute_path):
-        raise ConflictError("A directory with the same name exists.")
-
-    # Validate file type if necessary
-    allowed_file_types = ['txt', 'mp3', 'mp4']  # Allowed types
-    if file_type not in allowed_file_types:
-        raise ConflictError("Invalid file type.")
-
-    # Save the file and assign ownership
+    # At this point, we are ok for writing. Send a response back to the front end.
     try:
-        os.makedirs(os.path.dirname(absolute_path), exist_ok=True)
-        with open(absolute_path, 'wb') as f:
-            f.write(file_content)
-        set_file_owner(absolute_path, owner)
-        return AckCodes.OK
+        os.mkdirs(os.path.dirname(path), exist_ok = True)
+        return UploadHandle(path, curr_user)
     except PermissionError:
-        return AckCodes.UNAUTHORIZED
-    except Exception:
-        return AckCodes.CONFLICT
+        return UnauthorizedError("The system does not have access to the resource specified")
+    except:
+        return ConflictError("File aready exists")
+    
+def UploadFile(handle: UploadHandle, content) -> bool:
+    if handle is None or not handle.path.exists():
+        return False
 
-def DownloadFile(path, data):
-    if not isinstance(path, str) or not path:
-        raise NotFoundError("Invalid path.")
+    try:
+        f = open(handle.path, 'wb')
+        f.write(content)
 
-    owner = data.get('owner')
-    client_directory = data.get('client_directory')
+        f.close()
+        return True
+    except:
+        return False
+
+def ExtractFileContents(path: str, curr_user: Credentials, curr_dir: str) -> str | None:
+    if not path or not curr_user or not curr_dir:
+        return None
 
     # Construct the absolute path
-    absolute_path = os.path.abspath(os.path.join(ROOT_DIRECTORY, client_directory, path))
+    absolute_path = Path(os.path.abspath(os.path.join(ROOT_DIRECTORY, curr_dir, path)))
 
     # Ensure the absolute path is within the root directory
     if not absolute_path.startswith(os.path.abspath(ROOT_DIRECTORY)):
         raise PathInvalidError("Attempted to access outside of root directory.")
+
+    if not absolute_path.exists() or CheckFIleOwner()
 
     # Check if file exists and is not a directory
     if not os.path.exists(absolute_path) or os.path.isdir(absolute_path):
@@ -124,6 +105,8 @@ def DeleteFile(path, data):
     except Exception:
         raise ConflictError("Could not delete the file.")
 
+# The `move` command tells the server to change its current directory for the client, not move a file or data
+"""
 def MoveItem(path, new_path, data):
     # Validate paths are strings and not empty
     if not isinstance(path, str) or not path:
@@ -159,6 +142,7 @@ def MoveItem(path, new_path, data):
         raise UnauthorizedError("Permission denied.")
     except Exception:
         raise ConflictError("Could not move the item.")
+"""
 
 def ModifySubdirectories(path, subfolder_action, data):
     # Validate path is a string and not empty
@@ -187,14 +171,14 @@ def ModifySubdirectories(path, subfolder_action, data):
     
     # Perform action
     try:
-        if subfolder_action == SubfolderAction.ADD:
+        if subfolder_action == SubfolderAction.Add:
             if os.path.exists(target_path):
                 return AckCodes.CONFLICT
             os.makedirs(target_path, exist_ok=False)
             # Assign ownership metadata
             os.setxattr(target_path, 'user.owner', owner.encode())
             return AckCodes.OK
-        elif subfolder_action == SubfolderAction.REMOVE:
+        elif subfolder_action == SubfolderAction.Delete:
             if not os.path.exists(target_path) or not os.path.isdir(target_path):
                 return AckCodes.NOT_FOUND
             dir_owner = os.getxattr(target_path, 'user.owner').decode()

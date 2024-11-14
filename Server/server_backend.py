@@ -1,8 +1,7 @@
 from file_io import UploadFile, DownloadFile, DeleteFile, MoveDirectory, ModifySubdirectories, ListFilesWrapper, GetFileSize
-from file_tracking import CheckFileOwner, GetDirectoryStructure, Status
+from file_tracking import CheckFileOwner, get_directory_structure, Status
 from directory_info import DirectoryInfo, FileInfo
-from ack_codes import AckCodes
-from exceptions import *
+from Server.http_codes import *
 
 def ProcessUploadRequest(data):
     try:
@@ -37,7 +36,7 @@ def ProcessDeleteRequest(data):
 
 def ProcessDirRequest():
     # Return entire directory structure
-    directory_structure = GetDirectoryStructure()
+    directory_structure = get_directory_structure()
     if directory_structure:
         return {"status": AckCodes.OK.name, "directory_structure": directory_structure}
     return {"status": AckCodes.NOT_FOUND.name}
