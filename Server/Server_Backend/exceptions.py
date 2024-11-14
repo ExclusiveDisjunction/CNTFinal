@@ -1,4 +1,3 @@
-# exceptions.py
 class FileSystemError(Exception):
     """Base class for file system exceptions."""
     pass
