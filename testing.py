@@ -1,6 +1,5 @@
 from Common.message_handler import *
-from Server.server_path import DirectoryInfo, FileInfo, FileType
-from Server.credentials import Credentials
+from Server.io_tools import DirectoryInfo, FileInfo, FileType
 import socket
 
 def client_dummy() -> bool:
@@ -10,12 +9,43 @@ def client_dummy() -> bool:
 
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect(("127.0.0.1", 8080))
-        data = s.recv(1024)
-        print(data.decode("utf-8"))
+        s.connect(("127.0.0.1", 8081))
+        
+        connect = ConnectMessage("hi", "djdlkdjf")
+        s.sendall(connect.construct_message_json().encode())
+
+        contents = s.recv(1024)
+        if contents is None or len(contents) == 0:
+            print("Connection terminated")
+            s.close()
+
+            return False
+
+        recv = MessageBasis.parse_from_json(contents.decode("utf-8"))
+        if not isinstance(recv, AckMessage):
+            print(f"Unexpected message of type {recv.message_type()}")
+            s.close()
+            return False
+        
+        print("Closing connection")
+        s.send(CloseMessage().construct_message_json().encode())
+
+        contents = s.recv(1024)
+        if contents is None or len(contents) == 0:
+            print("Connection terminated")
+            s.close()
+
+            return False
+
+        recv = MessageBasis.parse_from_json(contents.decode("utf-8"))
+        if not isinstance(recv, AckMessage):
+            print(f"Unexpected message of type {recv.message_type()}")
+            s.close()
+            return False
 
         return True
-    except:
+    except Exception as e:
+        print(f"Caught {str(e)}")
         return False
 
 
@@ -75,7 +105,7 @@ def dir_resp_test() -> bool:
 
 
 if __name__ == "__main__":
-    if dir_resp_test():
+    if client_dummy():
         print("\nAll tests passed")
     else:
         print("\nOne or more tests failed")

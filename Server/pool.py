@@ -1,9 +1,17 @@
+<<<<<<< HEAD
 from credentials import *
 from socket import socket as soc
 import socket 
 
 from connection import Connection
     
+=======
+from .credentials import *
+from socket import socket as soc
+import socket 
+
+from .connection import Connection
+>>>>>>> server-backend
 
 class ThreadPool:
     def __init__(self):
@@ -46,7 +54,7 @@ class ThreadPool:
     def mainLoop(self):
         while True:
             c, addr = self.__socket.accept()
-            print(f"Accepted connection from ${addr}")
+            print(f"Accepted connection from {addr[0]} on port {addr[1]}")
 
             open_conn = self.__get_next_open()
             if open_conn == None:
