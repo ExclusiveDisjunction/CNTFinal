@@ -5,7 +5,7 @@ import socket
 from tkinter import font as tkFont
 from tkinter import messagebox
 import bcrypt
-from Common.message_handler import MessageBasis, AckMessage, ConnectMessage
+from Common.message_handler import MessageBasis, AckMessage, ConnectMessage, CloseMessage
 import json
 
 class FileSharingApp(tk.Tk):
@@ -23,6 +23,7 @@ class FileSharingApp(tk.Tk):
         # define colors
         self.bg_color = "#2C2C2C"  
         self.sidebar_color = "#3D3D3D"
+        self.topbar_color = "#545454"
         self.button_color = "#BB86FC" 
         self.button_hover_color = "#A569BD"
         self.text_color = "white"
@@ -32,16 +33,31 @@ class FileSharingApp(tk.Tk):
         # initialize UI elements
         self.current_page = None
         self.pages = {}
-
         self.create_sidebar()
         self.create_pages()
 
         self.show_page("Connect")
 
+    def create_topbar(self, text=None):
+        if hasattr(self, 'topbar'):
+            self.title_label.config(text=text)
+        else:
+            
+            self.topbar = tk.Frame(self, height=100, bg=self.topbar_color)
+            self.topbar.pack(side="top", fill="x")
+            self.title_label = tk.Label(
+                self.topbar,
+                text=text,
+                font=("Figtree", 24),
+                fg=self.text_color,
+                bg=self.topbar_color,
+                justify="left"
+            )
+            self.title_label.pack()
+
     def create_sidebar(self):
         self.sidebar = tk.Frame(self, width=200, bg=self.sidebar_color)
         self.sidebar.pack(side="left", fill="y")
-
         self.buttons = {}
         self.create_sidebar_button("My Files", self.show_my_files, padding=(75, 10))
         self.create_sidebar_button("All Files", self.show_all_files)
@@ -58,6 +74,7 @@ class FileSharingApp(tk.Tk):
             bg=self.sidebar_color
         )
         self.status_label.pack(pady=20)
+        self.create_topbar()
 
     def create_sidebar_button(self, text, command, padding=(10, 10)):
         button = tk.Button(self.sidebar, text=text, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, command=command)
@@ -147,8 +164,7 @@ class MyFilesPage(Page):
         super().__init__(parent, bg_color, text_color, button_color)
 
     def create_content(self):
-        label = tk.Label(self, text="My Files:", font=("Figtree", 24), fg=self.text_color, bg=self.bg_color)
-        label.pack(pady=20)
+        self.master.create_topbar("My Files")
         file_list = tk.Listbox(self, height=10, width=40)
         file_list.insert(tk.END, "File 1")
         file_list.insert(tk.END, "File 2")
@@ -203,29 +219,31 @@ class ConnectPage(Page):
 
         connect_message = ConnectMessage(username=self.username, passwordHash=hashed_password.decode())
         try:
-            connect_message_json = connect_message.construct_message_json()
-            self.con.sendall(connect_message_json.encode())
+            self.con.sendall(connect_message.construct_message_json().encode())
 
-            contents = self.con.recv(1024).decode()
-            if contents == "":
+            contents = self.con.recv(1024)
+            if contents is None or len(contents) == 0:
+                print("Connection terminated")
                 messagebox.showerror("Error", "Invalid credentials.")
-                return
+                self.con.close()
             
-            message = MessageBasis.parse_from_json(contents)
-            if isinstance(message, AckMessage):
-                code, server_message = message.code(), message.message()
-                if code != 200:
-                    messagebox.showerror("Error", server_message)
-                else:
-                    self.parent.show_page("My Files")
-                    self.parent.status_update("Online")
-            else:
-                messagebox.showerror("Error", "Unexpected error occurred.")
+            message = MessageBasis.parse_from_json(contents.decode("utf-8"))
+            if not isinstance(message, AckMessage):
+                print(f"Unexpected message of type {message.message_type()}")
+                self.con.close()
+                print("Closing connection")
+                self.con.send(CloseMessage().construct_message_json().encode())
+
+            message = MessageBasis.parse_from_json(contents.decode("utf-8"))
+            if not isinstance(message, AckMessage):
+                messagebox.showerror("Error", f"Unexpected message of type {message.message_type()}")
+                print(f"Unexpected message of type {message.message_type()}")
+                self.con.close()
+            self.master.status_update("Online")
+            self.master.show_page("My Files")
+            
         except Exception as e:
             messagebox.showerror("Error", f"Error: {e}")
-        finally:
-            if self.con:
-                self.con.close()
 
     def create_connection(self):
         try:
