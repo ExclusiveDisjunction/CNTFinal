@@ -259,9 +259,3 @@ class ConnectPage(Page):
 
         self.login_button = tk.Button(self, text="Login", font=("Figtree", 14), bg=self.button_color, fg=self.text_color, command=self.validate_login)
         self.login_button.pack(pady=10)
-
-
-
-if __name__ == "__main__":
-    app = FileSharingApp()
-    app.mainloop()
