@@ -1,5 +1,5 @@
 from Common.message_handler import *
-from Server.server_path import DirectoryInfo, FileInfo, FileType
+from Server.io_tools import DirectoryInfo, FileInfo, FileType
 from Server.credentials import Credentials
 import socket
 

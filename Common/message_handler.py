@@ -2,7 +2,7 @@ import json
 from enum import Enum
 from typing import Self
 
-from Server.server_path import DirectoryInfo, FileType
+from Server.io_tools import DirectoryInfo, FileType
 
 """
 

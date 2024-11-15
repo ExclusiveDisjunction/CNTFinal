@@ -3,7 +3,6 @@ from socket import socket as soc
 import socket 
 
 from connection import Connection
-    
 
 class ThreadPool:
     def __init__(self):
