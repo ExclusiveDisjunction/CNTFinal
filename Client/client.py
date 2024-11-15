@@ -33,9 +33,10 @@ class FileSharingApp(tk.Tk):
         # initialize UI elements
         self.current_page = None
         self.pages = {}
+        self.buttons = {}
+
         self.create_sidebar()
         self.create_pages()
-
         self.show_page("Connect")
 
     def create_topbar(self, text=None):
@@ -58,13 +59,13 @@ class FileSharingApp(tk.Tk):
     def create_sidebar(self):
         self.sidebar = tk.Frame(self, width=200, bg=self.sidebar_color)
         self.sidebar.pack(side="left", fill="y")
-        self.buttons = {}
-        self.create_sidebar_button("My Files", self.show_my_files, padding=(75, 10))
-        self.create_sidebar_button("All Files", self.show_all_files)
-        self.create_sidebar_button("Performance", self.show_performance)
+
+        self.buttons["My Files"] = self.create_sidebar_button("My Files", self.show_my_files, padding=(75, 10), stateE=tk.DISABLED)
+        self.buttons["All Files"] = self.create_sidebar_button("All Files", self.show_all_files, stateE=tk.DISABLED)
+        self.buttons["Performance"] = self.create_sidebar_button("Performance", self.show_performance, stateE=tk.DISABLED)
         
-        self.create_sidebar_button("Settings", self.show_settings, padding=(375,10))
-        self.create_sidebar_button("Connect", self.show_connect)
+        self.buttons["Settings"] = self.create_sidebar_button("Settings", self.show_settings, padding=(375,10), stateE=tk.DISABLED)
+        self.buttons["Connect"] = self.create_sidebar_button("Connect", self.show_connect)
 
         self.status_label = tk.Label(
             self.sidebar,
@@ -76,8 +77,8 @@ class FileSharingApp(tk.Tk):
         self.status_label.pack(pady=20)
         self.create_topbar()
 
-    def create_sidebar_button(self, text, command, padding=(10, 10)):
-        button = tk.Button(self.sidebar, text=text, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, command=command)
+    def create_sidebar_button(self, text, command, padding=(10, 10), stateE=tk.ACTIVE):
+        button = tk.Button(self.sidebar, text=text, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, state=stateE, command=command)
         button.pack(fill="x", pady=padding)
         self.buttons[text] = button
 
@@ -90,6 +91,10 @@ class FileSharingApp(tk.Tk):
         self.pages["Settings"] = SettingsPage(self, self.bg_color, self.text_color, self.button_color)
         self.pages["Connect"] = ConnectPage(self, self.bg_color, self.text_color, self.button_color)
 
+    def enable_buttons(self):
+        for button in self.buttons.values():
+            if button is not None:
+                button.config(state=tk.ACTIVE)
 
     def show_page(self, page_name):
         if page_name not in self.pages:
@@ -237,10 +242,11 @@ class ConnectPage(Page):
             message = MessageBasis.parse_from_json(contents.decode("utf-8"))
             if not isinstance(message, AckMessage):
                 messagebox.showerror("Error", f"Unexpected message of type {message.message_type()}")
-                print(f"Unexpected message of type {message.message_type()}")
+                print(f"Unexpected message of type {message.message_type()}sß")
                 self.con.close()
             self.master.status_update("Online")
             self.master.show_page("My Files")
+            self.master.enable_buttons()
             
         except Exception as e:
             messagebox.showerror("Error", f"Error: {e}")
