@@ -1,7 +1,8 @@
 import threading
-from credentials import *
+from .credentials import *
+from .io_tools import root_directory
 from socket import socket as soc
-from ..Common.message_handler import *
+from Common.message_handler import *
 
 class ConnectionCore:
     def __init__(self, conn: soc, addr, path: str | None):
@@ -26,7 +27,7 @@ class ConnectionCore:
             self.__lock.acquire()
             return True
     def unlock(self):
-        if self.__lock != None:
+        if self.__lock != None and self.__lock.locked():
             self.__lock.release()
     def drop(self):
         self.lock()
@@ -57,10 +58,12 @@ class Connection:
         self.__thread = None
 
     def setup(self, conn: soc, addr):
+        global root_directory
+
         if self.is_connected():
             self.kill()
 
-        self.__core = ConnectionCore(conn, addr)
+        self.__core = ConnectionCore(conn, addr, root_directory)
         self.__thread = threading.Thread(target=connection_proc, args=[self.__core])
 
     def is_connected(self):
@@ -90,11 +93,12 @@ class Connection:
             self.__core = None
 
 def connection_proc(conn: ConnectionCore) -> None:
-    print(f"[{conn.addr()}] Started connection proc")
+    addr_str = conn.addr()[0]
+    print(f"[{addr_str}] Started connection proc")
     if not conn.lock():
         return
     
-    print("[*] Awaiting Connect message...")
+    print(f"[{addr_str}] Awaiting Connect message...")
     contents = conn.conn().recv(1024)
     if contents == "" or contents is None:
         print(f"[{conn.addr()}] Connection terminated")
@@ -104,15 +108,15 @@ def connection_proc(conn: ConnectionCore) -> None:
 
     conn_msg = MessageBasis.parse_from_json(contents.decode())
     if conn_msg is None or not isinstance(conn_msg, ConnectMessage):
-        print(f"[{conn.addr()}] Invalid format, the connection message was invalid or not received")
+        print(f"[{addr_str}] Invalid format, the connection message was invalid or not received")
         conn.unlock()
         conn.drop()
         return
     
     conn.set_cred( Credentials(conn_msg.username(), conn_msg.passwordHash()) )
-    conn.set_path("")
+    print(f"[{addr_str}] Client signed on with username '{conn_msg.username()}'. Connection Success")
 
-    conn.conn().send(AckMessage(200, "OK").construct_message_json())
+    conn.conn().send(AckMessage(200, "OK").construct_message_json(request=False).encode())
     conn.unlock()
 
     last_was = None
@@ -123,8 +127,8 @@ def connection_proc(conn: ConnectionCore) -> None:
         # This is our message loop. It will accept messages, process them, and then perform the actions needed.
 
         contents = conn.conn().recv(buff_size)
-        if contents == "" or contents is None:
-            print(f"[{conn.addr()}] Connection terminated")
+        if len(contents) == 0 or contents is None:
+            print(f"[{addr_str}] Connection terminated")
             conn.unlock()
             conn.drop()
             return
@@ -138,11 +142,12 @@ def connection_proc(conn: ConnectionCore) -> None:
         
         message = MessageBasis.parse_from_json(contents)
         if message is None:
-            print(f"[{conn.addr()}] Invalid format, the connection message was invalid or not received")
+            print(f"[{addr_str}] Invalid format, the connection message was invalid or not received")
             conn.unlock()
             conn.drop()
             return
         
+        print(f"[{addr_str}] Processing request of kind {message.message_type()}")
 
         responses = []
         match message.message_type():
@@ -219,10 +224,11 @@ def connection_proc(conn: ConnectionCore) -> None:
                 code, message = (200, "OK")
                 responses.append(AckMessage(code, message))    
 
+        print(f"[{addr_str}] Response contains {len(responses)} message(s)")
         if responses is not None and len(responses) != 0:
             for response in responses:
                 if isinstance(response, MessageBasis):
-                    response_str = response.construct_message_json()
+                    response_str = response.construct_message_json(request=False)
                     conn.conn().send(response_str.encode())
                 elif isinstance(response, str):
                     conn.conn().send(response.encode())

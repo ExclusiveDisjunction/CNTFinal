@@ -169,6 +169,8 @@ class AckMessage(MessageBasis):
 
     def message_type(self) -> MessageType:
         return MessageType.Ack
+    def data(self) -> dict:
+        return self.data_response()
     def data_response(self) -> dict:
         return {
             "code": self.__code,
@@ -181,9 +183,6 @@ class AckMessage(MessageBasis):
         return self.__message
     
     def parse(data: dict, req: bool = True) -> Self:
-        if req:
-            raise ValueError("Ack message has no request variant")
-        
         try:
             code = int(data["code"])
             message = data["message"]

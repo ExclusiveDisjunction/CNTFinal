@@ -3,7 +3,7 @@ from typing import Self
 from pathlib import Path
 import os
 
-from credentials import Credentials
+from .credentials import Credentials
 
 class Status(Enum):
     FILE_NOT_FOUND = 'File not found'
@@ -12,6 +12,16 @@ class Status(Enum):
     SUCCESS = 'Success'
 
 root_directory = Path.home() / "cnt"
+
+def ensure_root_directory() -> bool:
+    global root_directory
+    
+    try:
+        if not root_directory.exists():
+            os.makedirs(root_directory)
+        return True
+    except:
+        return False
 
 class FileType(Enum):
     Text = "text"

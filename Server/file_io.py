@@ -1,11 +1,9 @@
 import os
-from enum import Enum
-from Server.http_codes import *
-
 from pathlib import Path
 
-from credentials import Credentials
-from Server.io_tools import FileType, move_relative, is_path_valid, is_file_owner, get_file_type, get_file_size
+from Common.http_codes import *
+from .credentials import Credentials
+from .io_tools import FileType, move_relative, is_path_valid, is_file_owner, get_file_type, get_file_size
 from ..Common.message_handler import SubfolderAction
 
 class UploadHandle:

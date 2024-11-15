@@ -1,7 +1,7 @@
 # exceptions.py
 
-from ..Common.message_handler import AckMessage
 from enum import Enum
+from .message_handler import AckMessage
 
 class HttpCodes(Enum):
     Continue = 100
