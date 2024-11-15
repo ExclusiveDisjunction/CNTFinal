@@ -2,7 +2,7 @@ import threading
 from socket import socket as soc
 
 from .credentials import *
-from .io_tools import root_directory, move_relative, create_directory_info, make_relative
+from .io_tools import root_directory, move_relative, create_directory_info, make_relative, get_file_type
 from .file_io import *
 from Common.message_handler import *
 
@@ -109,6 +109,8 @@ def recv_message(connection: soc, buff_size: int) -> MessageBasis | None:
         return result
 
 def connection_proc(conn: ConnectionCore) -> None:
+    global user_database
+
     addr_str = conn.addr()[0]
     print(f"[{addr_str}] Started connection proc")
     if not conn.lock():
@@ -123,14 +125,30 @@ def connection_proc(conn: ConnectionCore) -> None:
         conn.drop()
         return
     
-    conn.set_cred( Credentials(conn_msg.username(), conn_msg.passwordHash()) )
-    print(f"[{addr_str}] Client signed on with username '{conn_msg.username()}'. Connection Success")
+    target_cred = Credentials(conn_msg.username(), conn_msg.passwordHash())
+    user_lookup = user_database.get_user(target_cred.getUsername())
+    keep_connection = True
+    connect_ack = None
+    if user_lookup is None:
+        user_database.set_user_pass(target_cred)
+        connect_ack = AckMessage(HttpCodes.Ok, f"Welcome new user, '{target_cred.getUsername()}'")
+    else:
+        if target_cred.getPasswordHash() != user_lookup.getPasswordHash():
+            connect_ack = AckMessage(HttpCodes.Unauthorized, "Invalid password") # Close down credentials
+            keep_connection = False
+        else:
+            connect_ack = AckMessage(HttpCodes.Ok, f"Welcome back, '{target_cred.getUsername()}'")
 
-    conn.conn().send(AckMessage(200, "OK").construct_message_json(request=False).encode())
-    conn.unlock()
-
-    last_was = None
-    last_was_ok = True
+    conn.conn().send(connect_ack.construct_message_json().encode())
+    if not keep_connection:
+        print(f"[{addr_str}] Authentication failed for user. Closing connection")
+        conn.unlock()
+        conn.drop()
+        return
+    else:
+        print(f"[{addr_str}] Authentication success.")
+        conn.set_cred(target_cred)
+        conn.unlock()
 
     buff_size = 1024
     buff_size_prev = None
@@ -143,7 +161,14 @@ def connection_proc(conn: ConnectionCore) -> None:
         while conn.lock():
             # This is our message loop. It will accept messages, process them, and then perform the actions needed.
 
-            contents = conn.conn().recv(buff_size)
+            try:
+                contents = conn.conn().recv(buff_size)
+            except OSError:
+                print(f"[{addr_str}] Connection terminated")
+                conn.unlock()
+                conn.drop()
+                return
+            
             if len(contents) == 0 or contents is None:
                 print(f"[{addr_str}] Connection terminated")
                 conn.unlock()
@@ -162,16 +187,24 @@ def connection_proc(conn: ConnectionCore) -> None:
                 else:
                     response = AckMessage(HttpCodes.Conflict, "Unable to upload file")
 
-                conn.conn().sendall(response.construct_message_json())
+                conn.conn().sendall(response.construct_message_json().encode())
                 conn.unlock()
+                upload_handle = None
+                buff_size = buff_size_prev
+                buff_size_prev = None
+                size_was_set = None
                 continue
             
-            message = MessageBasis.parse_from_json(contents)
-            if message is None:
-                print(f"[{addr_str}] Invalid format, the connection message was invalid or not received")
-                conn.unlock()
-                conn.drop()
-                return
+            try:
+                message = MessageBasis.parse_from_json(contents)
+            except:
+                message = None
+            finally:
+                if message is None:
+                    print(f"[{addr_str}] Invalid format, the connection message was invalid or not received")
+                    conn.unlock()
+                    conn.drop()
+                    return
             
             print(f"[{addr_str}] Processing request of kind {message.message_type()}")
 
@@ -188,7 +221,7 @@ def connection_proc(conn: ConnectionCore) -> None:
                     responses.append(AckMessage(418, "Server cannot receive an ack"))
 
                 case MessageType.Size:
-                    if size_was_set < cyc_count: # Happened in the past
+                    if size_was_set is None or size_was_set >= cyc_count: # Happened in the past
                         buff_size_prev = buff_size
 
                     buff_size = message.size()
@@ -206,7 +239,7 @@ def connection_proc(conn: ConnectionCore) -> None:
                     else:
                         responses.append(AckMessage(200, "OK"))
                         
-                        if size_was_set < cyc_count: # Happened in the past
+                        if size_was_set is None or size_was_set >= cyc_count: # Happened in the past
                             buff_size_prev = buff_size
 
                         buff_size = size
@@ -217,17 +250,15 @@ def connection_proc(conn: ConnectionCore) -> None:
                     path = move_relative(path, conn.path())
 
                     file_contents = ExtractFileContents(path, conn.cred())
-                    if isinstance(file_contents, str):
+                    if isinstance(file_contents, HTTPErrorBasis):
+                        responses.append(DownloadMessage(file_contents.code, file_contents.message, None, None))
+                        
+                    else:
                         kind = get_file_type(path)
                         size = len(file_contents)
 
                         responses.append(DownloadMessage(HttpCodes.Ok, "OK", kind, size))
-
-                    elif isinstance(file_contents, HTTPErrorBasis):
-                        responses.append(DownloadMessage(file_contents.code, file_contents.message, None, None))
-                        
-                    else:
-                        responses.append(DownloadMessage(HttpCodes.Conflict, "Unable to retreive resource"))
+                        responses.append(file_contents)
 
                 case MessageType.Delete:
                     path = message.path()
@@ -235,7 +266,7 @@ def connection_proc(conn: ConnectionCore) -> None:
 
                     result = DeleteFile(path, conn.cred())
                     if result is None:
-                        responses.append(AckMessage(HttpCodes.OK, "OK"))
+                        responses.append(AckMessage(HttpCodes.Ok, "OK"))
                     else:
                         responses.append(result.to_ack())
 
@@ -244,7 +275,8 @@ def connection_proc(conn: ConnectionCore) -> None:
                         responses.append(DirMessage(401, "Not signed in", None, None))
                     else:
                         dir_structure = create_directory_info()
-                        dir_as_str = DirMessage(200, "OK", make_relative(conn.path()), dir_structure).construct_message_json()
+                        curr_dir = make_relative(conn.path())
+                        dir_as_str = DirMessage(200, "OK", curr_dir, dir_structure).construct_message_json(request=False)
 
                         size = len(dir_as_str)
                         responses.append(SizeMessage(size))
@@ -252,7 +284,7 @@ def connection_proc(conn: ConnectionCore) -> None:
                         
                 case MessageType.Move:
                     path = message.path()
-                    path = move_relative(path)
+                    path = move_relative(path, conn.path())
 
                     if not is_path_valid(path):
                         responses.append(AckMessage(HttpCodes.Forbidden, "Invalid path"))
@@ -262,7 +294,7 @@ def connection_proc(conn: ConnectionCore) -> None:
                 
                 case MessageType.Subfolder:
                     path, action = message.path(), message.action()
-                    path = move_relative(path)
+                    path = move_relative(path, conn.path())
 
                     result = ModifySubdirectories(path, action)
                     if result is None:
@@ -275,14 +307,17 @@ def connection_proc(conn: ConnectionCore) -> None:
                 for response in responses:
                     if isinstance(response, MessageBasis):
                         response_str = response.construct_message_json(request=False)
-                        conn.conn().send(response_str.encode())
+                        if isinstance(response, SizeMessage) or (isinstance(response, DownloadMessage) and response.is_response()):
+                            conn.conn().send(response_str.encode().ljust(1024, b'\x00'))
+                        else:
+                            conn.conn().send(response_str.encode())
                     elif isinstance(response, str):
                         conn.conn().send(response.encode())
 
-            if size_was_set is not None and size_was_set < cyc_count:
+            if size_was_set is not None and size_was_set < cyc_count and buff_size_prev is not None:
                 buff_size = buff_size_prev 
-
-            last_was = message.message_type()
+                size_was_set = None
+                buff_size_prev = None
 
             cyc_count += 1
             conn.unlock()
