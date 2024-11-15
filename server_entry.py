@@ -1,5 +1,6 @@
 import Server.pool as pool
 from Server.io_tools import ensure_root_directory
+from Server.credentials import user_database
 
 threadPool = pool.ThreadPool()
 
@@ -30,4 +31,5 @@ finally:
     print(f"Shutting down thread pool")
     threadPool.kill()
     
+user_database.save()
 print("Goodbye!")

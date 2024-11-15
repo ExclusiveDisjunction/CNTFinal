@@ -11,7 +11,7 @@ class Status(Enum):
     UNAUTHORIZED = 'Unauthorized'
     SUCCESS = 'Success'
 
-root_directory = Path.home() / "cnt"
+root_directory = Path.home() / "cnt" / "data"
 
 def ensure_root_directory() -> bool:
     global root_directory
@@ -56,7 +56,7 @@ class FileInfo:
             file_kind = None
             owner = None
 
-        if name == None or file_kind == None or owner == None:
+        if name == None or file_kind == None:
             raise ValueError("The dictionary does not contain enough data to fill this structure")
         
         return FileInfo(name, owner, file_kind, parent)
@@ -112,10 +112,13 @@ class DirectoryInfo:
                 content.set_parent(self)
 
     def to_dict(self) -> dict:
+        contents = []
+        for item in self.__contents:
+            contents.append(item.to_dict())
         return {
             "kind": "directory",
             "name": self.__name,
-            "contents": self.__contents
+            "contents": contents
         } 
     def from_dict(data: dict) -> Self | None:
         try:
@@ -238,11 +241,16 @@ def remove_from_front_path(path: Path, n_remove: int) -> Path | None:
     """
     Removes a specified number of elements from the start of a path
     """
-    if path is None or n_remove < 0 or n_remove >= len(path.parts):
+    if path is None or n_remove < 0 or n_remove > len(path.parts):
         return None
+    elif n_remove == len(path.parts):
+        return Path("")
     
     extracted = path.parts[n_remove:]
-    return Path('/'.join(extracted))
+    if len(extracted) == 0:
+        return Path()
+    else:
+        return Path('/'.join(extracted))
 
 def is_path_valid(path: Path) -> bool:
     """
@@ -251,21 +259,24 @@ def is_path_valid(path: Path) -> bool:
     global root_directory
 
     target_size = len(root_directory.parts)
-    if len(path.parts) < target_size:
+    if len(path.parts) == target_size:
+        return True
+    elif len(path.parts) < target_size:
         return False
-    
-    return path.parts[0:target_size] == root_directory.parts
+    else:
+        return path.parts[0:target_size] == root_directory.parts
 
 # File management
 def get_file_owner(path) -> str:
     try:
-        return os.getxattr(path, 'user.owner').decode()
+        # return os.getxattr(path, 'user.owner').decode()
+        pass
     except (OSError, AttributeError):
         return None
     
 def set_file_owner(path, owner: Credentials) -> bool:
     try:
-        os.setxattr(path, 'user.owner', owner.getUsername().encode())
+        # os.setxattr(path, 'user.owner', owner.getUsername().encode())
         return True
     
     except (OSError, AttributeError):
@@ -276,7 +287,8 @@ def is_file_owner(path: Path, user: Credentials) -> bool:
         return False
 
     file_owner = get_file_owner(path)
-    return file_owner == user.getUsername()
+    return True
+    #return file_owner == user.getUsername()
     
 def get_file_type(path: Path) -> FileType | None:
     if path is None:
@@ -290,8 +302,14 @@ def get_file_type(path: Path) -> FileType | None:
         case _:
             return FileType.Text
         
-def get_file_size(path: Path) -> int | None:
-    if path is None or not path.is_file():
+def get_file_size(path: Path | str) -> int | None:
+    if path is None:
+        return None
+    
+    if isinstance(path, str):
+        path = Path(path)
+    
+    if not path.is_file():
         return None
     
     try:

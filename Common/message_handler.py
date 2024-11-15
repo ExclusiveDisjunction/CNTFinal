@@ -1,6 +1,7 @@
 import json
 from enum import Enum
 from typing import Self
+from pathlib import Path
 
 from Server.io_tools import DirectoryInfo, FileType
 
@@ -164,7 +165,7 @@ class ConnectMessage(MessageBasis):
 
 class AckMessage(MessageBasis):
     def __init__(self, code: int, message: str):
-        self.__code = code
+        self.__code = int(code)
         self.__message = message
 
     def message_type(self) -> MessageType:
@@ -242,7 +243,7 @@ class SizeMessage(MessageBasis):
     
 class UploadMessage(MessageBasis):
     def __init__(self, name: str, kind: FileType, size: int):
-        self.__name = name
+        self.__name = str(name)
         self.__kind = kind
         self.__size = size
 
@@ -398,14 +399,14 @@ class DownloadMessage(MessageBasis):
                 return DownloadMessage(status, message, format["kind"], format["size"])
 
 class DeleteMessage(MessageBasis):
-    def __init__(self, path: str):
-        self.__path = path
+    def __init__(self, path: str | Path):
+        self.__path = Path(path)
 
     def message_type(self) -> MessageType:
         return MessageType.Delete
     def data(self) -> dict:
         return {
-            "path": self.__path
+            "path": str(self.__path)
         }
 
     def path(self) -> str:
@@ -433,7 +434,7 @@ class DirMessage(MessageBasis):
         elif len(args) == 4:
             code = args[0]
             message = args[1]
-            curr_dir = args[2]
+            curr_dir = Path(args[2])
             root = args[3]
 
             if not isinstance(root, DirectoryInfo):
@@ -461,6 +462,7 @@ class DirMessage(MessageBasis):
         return {
             "response": self.__code,
             "message": self.__message,
+            "curr_dir": str(self.__curr_dir),
             "root": self.__root.to_dict()
         }
     
@@ -498,7 +500,7 @@ class DirMessage(MessageBasis):
                 code = int(data["response"])
                 message = data["message"]
                 curr_dir = data["curr_dir"]
-                root = DirectoryInfo.from_message_dict(dict(data["root"]))
+                root = DirectoryInfo.from_dict(dict(data["root"]))
             except:
                 code = None
                 message = None
@@ -511,14 +513,14 @@ class DirMessage(MessageBasis):
                 return DirMessage(code, message, curr_dir, root)
 
 class MoveMessage(MessageBasis):
-    def __init__(self, path: str):
-        self.__path = path
+    def __init__(self, path: Path | str):
+        self.__path = Path(path)
 
     def message_type(self) -> MessageType:
         return MessageType.Move
     def data(self) -> dict:
         return {
-            "path": self.__path
+            "path": str(self.__path)
         }
 
     def path(self) -> str:
@@ -539,15 +541,15 @@ class SubfolderAction(Enum):
     Delete = "delete"
     Add = "add"
 class SubfolderMessage(MessageBasis):
-    def __init__(self, path: str, action: SubfolderAction):
-        self.__path = path
+    def __init__(self, path: Path | str, action: SubfolderAction):
+        self.__path = Path(path)
         self.__action = action
 
     def message_type(self) -> MessageType:
         return MessageType.Subfolder
     def data(self) -> dict:
         return {
-            "path": self.__path,
+            "path": str(self.__path),
             "action": self.__action.value
         }
 
