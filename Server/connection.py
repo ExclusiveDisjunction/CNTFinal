@@ -1,11 +1,16 @@
 import threading
-from .credentials import *
-from .io_tools import root_directory
 from socket import socket as soc
+
+from .credentials import *
+from .io_tools import root_directory, move_relative, create_directory_info, make_relative
+from .file_io import *
 from Common.message_handler import *
 
 class ConnectionCore:
-    def __init__(self, conn: soc, addr, path: str | None):
+    def __init__(self, conn: soc, addr, path: Path):
+        if path is None:
+            raise ValueError("Path cannot be None")
+
         self.__conn = conn
         self.__addr = addr
         self.__lock = threading.Lock()
@@ -92,6 +97,17 @@ class Connection:
             self.__thread = None
             self.__core = None
 
+def recv_message(connection: soc, buff_size: int) -> MessageBasis | None:
+    contents = connection.recv(buff_size)
+    if contents is None or len(contents) == 0:
+        return False
+    
+    result = MessageBasis.parse_from_json(contents)
+    if result is None:
+        return None
+    else:
+        return result
+
 def connection_proc(conn: ConnectionCore) -> None:
     addr_str = conn.addr()[0]
     print(f"[{addr_str}] Started connection proc")
@@ -99,16 +115,10 @@ def connection_proc(conn: ConnectionCore) -> None:
         return
     
     print(f"[{addr_str}] Awaiting Connect message...")
-    contents = conn.conn().recv(1024)
-    if contents == "" or contents is None:
-        print(f"[{conn.addr()}] Connection terminated")
-        conn.unlock()
-        conn.drop()
-        return
 
-    conn_msg = MessageBasis.parse_from_json(contents.decode())
+    conn_msg = recv_message(conn.conn(), 1024)
     if conn_msg is None or not isinstance(conn_msg, ConnectMessage):
-        print(f"[{addr_str}] Invalid format, the connection message was invalid or not received")
+        print(f"[{addr_str}] Connection dropped or message is of invalid format")
         conn.unlock()
         conn.drop()
         return
@@ -121,121 +131,163 @@ def connection_proc(conn: ConnectionCore) -> None:
 
     last_was = None
     last_was_ok = True
+
     buff_size = 1024
     buff_size_prev = None
-    while conn.lock():
-        # This is our message loop. It will accept messages, process them, and then perform the actions needed.
+    size_was_set = None
+    cyc_count = 0
 
-        contents = conn.conn().recv(buff_size)
-        if len(contents) == 0 or contents is None:
-            print(f"[{addr_str}] Connection terminated")
-            conn.unlock()
-            conn.drop()
-            return
-        
-        contents = contents.decode()
-        
-        # We need to treat this as a file, not a message
-        if last_was_ok and last_was == MessageType.Upload:
-            # Pass the file to the IO model
-            pass
-        
-        message = MessageBasis.parse_from_json(contents)
-        if message is None:
-            print(f"[{addr_str}] Invalid format, the connection message was invalid or not received")
-            conn.unlock()
-            conn.drop()
-            return
-        
-        print(f"[{addr_str}] Processing request of kind {message.message_type()}")
+    upload_handle = None
 
-        responses = []
-        match message.message_type():
-            case MessageType.Connect:
-                # Invalid, already connected
-                responses.append(AckMessage(418, "Already connected"))
+    try:
+        while conn.lock():
+            # This is our message loop. It will accept messages, process them, and then perform the actions needed.
 
-            case MessageType.Close:
-                responses.append(AckMessage(200, "Goodbye!"))
+            contents = conn.conn().recv(buff_size)
+            if len(contents) == 0 or contents is None:
+                print(f"[{addr_str}] Connection terminated")
+                conn.unlock()
+                conn.drop()
+                return
+            
+            contents = contents.decode()
+            
+            # We need to treat this as a file, not a message
+            if upload_handle is not None and isinstance(upload_handle, UploadHandle):
+                result = UploadFile(upload_handle, contents)
+                upload_handle = None
 
-            case MessageType.Ack:
-                responses.append(AckMessage(418, "Server cannot receive an ack"))
+                if result:
+                    response = AckMessage(200, "OK")
+                else:
+                    response = AckMessage(HttpCodes.Conflict, "Unable to upload file")
 
-            case MessageType.Size:
-                if last_was != MessageType.Size:
-                    buff_size_prev = buff_size
+                conn.conn().sendall(response.construct_message_json())
+                conn.unlock()
+                continue
+            
+            message = MessageBasis.parse_from_json(contents)
+            if message is None:
+                print(f"[{addr_str}] Invalid format, the connection message was invalid or not received")
+                conn.unlock()
+                conn.drop()
+                return
+            
+            print(f"[{addr_str}] Processing request of kind {message.message_type()}")
 
-                buff_size = message.size()
-                # Size has no response 
+            responses = []
+            match message.message_type():
+                case MessageType.Connect:
+                    # Invalid, already connected
+                    responses.append(AckMessage(418, "Already connected"))
 
-            case MessageType.Upload:
-                name, kind, size = message.name(), message.kind(), message.size()
-                # Pass to the IO model
-                can_send = True # Dummy value
-                code, message = (401, "Unauthorized") # Dummy value
+                case MessageType.Close:
+                    responses.append(AckMessage(200, "Goodbye!"))
 
-                responses.append(AckMessage(code, message))
+                case MessageType.Ack:
+                    responses.append(AckMessage(418, "Server cannot receive an ack"))
 
-            case MessageType.Download:
-                path = message.path()
+                case MessageType.Size:
+                    if size_was_set < cyc_count: # Happened in the past
+                        buff_size_prev = buff_size
+
+                    buff_size = message.size()
+                    size_was_set = cyc_count
+                    # Size has no response 
+
+                case MessageType.Upload:
+                    path, kind, size = message.name(), message.kind(), message.size()
+
+                    path = move_relative(path, conn.path())
+                    upload_handle = RequestUpload(path, conn.cred())
+                    if isinstance(upload_handle, HTTPErrorBasis):
+                        responses.append(upload_handle.to_ack())
+                        upload_handle = None
+                    else:
+                        responses.append(AckMessage(200, "OK"))
+                        
+                        if size_was_set < cyc_count: # Happened in the past
+                            buff_size_prev = buff_size
+
+                        buff_size = size
+                        size_was_set = cyc_count
+
+                case MessageType.Download:
+                    path = message.path()
+                    path = move_relative(path, conn.path())
+
+                    file_contents = ExtractFileContents(path, conn.cred())
+                    if isinstance(file_contents, str):
+                        kind = get_file_type(path)
+                        size = len(file_contents)
+
+                        responses.append(DownloadMessage(HttpCodes.Ok, "OK", kind, size))
+
+                    elif isinstance(file_contents, HTTPErrorBasis):
+                        responses.append(DownloadMessage(file_contents.code, file_contents.message, None, None))
+                        
+                    else:
+                        responses.append(DownloadMessage(HttpCodes.Conflict, "Unable to retreive resource"))
+
+                case MessageType.Delete:
+                    path = message.path()
+                    path = move_relative(path, conn.path())
+
+                    result = DeleteFile(path, conn.cred())
+                    if result is None:
+                        responses.append(AckMessage(HttpCodes.OK, "OK"))
+                    else:
+                        responses.append(result.to_ack())
+
+                case MessageType.Dir:
+                    if conn.cred() is None:
+                        responses.append(DirMessage(401, "Not signed in", None, None))
+                    else:
+                        dir_structure = create_directory_info()
+                        dir_as_str = DirMessage(200, "OK", make_relative(conn.path()), dir_structure).construct_message_json()
+
+                        size = len(dir_as_str)
+                        responses.append(SizeMessage(size))
+                        responses.append(dir_as_str)
+                        
+                case MessageType.Move:
+                    path = message.path()
+                    path = move_relative(path)
+
+                    if not is_path_valid(path):
+                        responses.append(AckMessage(HttpCodes.Forbidden, "Invalid path"))
+                    else:
+                        conn.set_path(path)
+                        responses.append(AckMessage(HttpCodes.Ok, "OK"))
                 
-                # We need to validate the request with the IO model
-                can_send = True
-                code, message = (401, "Unauthorized") # Both dummy values
-                file_type, file_size = (FileType.Text, 200) # Expects None, None if code is an error code
-                file_contents = "Dummy file contents"
+                case MessageType.Subfolder:
+                    path, action = message.path(), message.action()
+                    path = move_relative(path)
 
-                responses.append(DownloadMessage(code, message, file_type, file_size))
+                    result = ModifySubdirectories(path, action)
+                    if result is None:
+                        responses.append(AckMessage(200, "OK"))
+                    else:
+                        responses.append(result.to_ack())
 
-                if can_send:
-                    responses.append(file_contents)
+            print(f"[{addr_str}] Response contains {len(responses)} message(s)")
+            if responses is not None and len(responses) != 0:
+                for response in responses:
+                    if isinstance(response, MessageBasis):
+                        response_str = response.construct_message_json(request=False)
+                        conn.conn().send(response_str.encode())
+                    elif isinstance(response, str):
+                        conn.conn().send(response.encode())
 
-            case MessageType.Delete:
-                path = message.path()
+            if size_was_set is not None and size_was_set < cyc_count:
+                buff_size = buff_size_prev 
 
-                # Validate request with IO model
-                code, message = (200, "OK")
-                responses.append(AckMessage(code, message))    
+            last_was = message.message_type()
 
-            case MessageType.Dir:
-                # Get directory info from backend
-                try:
-                    code, message, info = 200, "OK", DirectoryInfo("") # Dummy
-                    dir_resp = DirMessage(code, message, info, conn.path())
-                    size = len(dir_resp.construct_message_json())
-
-                    responses.append(SizeMessage(size))
-                    responses.append(dir_resp)
-
-                except: # Not signed in 
-                    responses.append(DirMessage(401, "Not signed in", None, None))
-            
-            case MessageType.Move:
-                path = message.path()
-
-                # Validate request with IO model
-                code, message = (200, "OK")
-                responses.append(AckMessage(code, message))    
-            
-            case MessageType.Subfolder:
-                path, action = message.path(), message.action()
-
-                # Validate request with IO model
-                code, message = (200, "OK")
-                responses.append(AckMessage(code, message))    
-
-        print(f"[{addr_str}] Response contains {len(responses)} message(s)")
-        if responses is not None and len(responses) != 0:
-            for response in responses:
-                if isinstance(response, MessageBasis):
-                    response_str = response.construct_message_json(request=False)
-                    conn.conn().send(response_str.encode())
-                elif isinstance(response, str):
-                    conn.conn().send(response.encode())
-
-        if last_was == MessageType.Size:
-            buff_size = buff_size_prev 
-
-        last_was = message.message_type()
-
+            cyc_count += 1
+            conn.unlock()
+    except OSError as e:
+        print(f"OSError caught: {str(e)}\nClosing connection")
         conn.unlock()
+        conn.drop()
+        return

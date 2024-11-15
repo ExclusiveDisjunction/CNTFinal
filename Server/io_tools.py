@@ -101,11 +101,13 @@ class DirectoryInfo:
         self.__name = name
         if contents is None:
             self.__contents = []
+        else:
+            self.__contents = contents
 
         self.__parent = parent
 
         # Build proper order
-        for content in contents:
+        for content in self.__contents:
             if content is not None:
                 content.set_parent(self)
 
@@ -204,6 +206,7 @@ def create_directory_info() -> DirectoryInfo:
     result = DirectoryInfo("root")
 
     result.set_contents(contents_to_list(root_directory))
+    return result
 
 # Path Management
 def move_relative(raw_path: str, curr_dir: Path) -> Path | None:

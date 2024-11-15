@@ -229,6 +229,17 @@ class SizeMessage(MessageBasis):
     def size(self) -> int:
         return self.__size
     
+    def parse(data: dict, req: bool = True) -> Self:
+        try:
+            size = data["size"]
+        except:
+            size = None
+
+        if size is None:
+            raise ValueError("The size member was not provided")
+        
+        return SizeMessage(size)
+    
 class UploadMessage(MessageBasis):
     def __init__(self, name: str, kind: FileType, size: int):
         self.__name = name
@@ -433,6 +444,8 @@ class DirMessage(MessageBasis):
             self.__message = message
             self.__curr_dir = curr_dir
             self.__root = root
+        else:
+            raise ValueError("Not enough arguments or too many")
 
     def message_type(self) -> MessageType:
         return MessageType.Dir
