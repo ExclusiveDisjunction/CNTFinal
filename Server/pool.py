@@ -1,17 +1,8 @@
-<<<<<<< HEAD
-from credentials import *
-from socket import socket as soc
-import socket 
-
-from connection import Connection
-    
-=======
 from .credentials import *
 from socket import socket as soc
 import socket 
 
 from .connection import Connection
->>>>>>> server-backend
 
 class ThreadPool:
     def __init__(self):
