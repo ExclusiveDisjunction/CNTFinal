@@ -2,9 +2,9 @@ import os
 from pathlib import Path
 
 from Common.http_codes import *
+from Common.message_handler import SubfolderAction
 from .credentials import Credentials
-from .io_tools import FileType, move_relative, is_path_valid, is_file_owner, get_file_type, get_file_size
-from ..Common.message_handler import SubfolderAction
+from .io_tools import is_path_valid, is_file_owner
 
 class UploadHandle:
     def __init__(self, path: Path, owner: Credentials):

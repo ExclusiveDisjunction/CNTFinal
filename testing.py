@@ -2,6 +2,17 @@ from Common.message_handler import *
 from Server.io_tools import DirectoryInfo, FileInfo, FileType
 import socket
 
+def print_dir_structure(dir: DirectoryInfo, ts = ''):
+    if dir is None:
+        return
+    
+    print(f"{ts}{dir.name()} (d)")
+    for item in dir.contents():
+        if isinstance(item, FileInfo):
+            print(f"{ts+'\t'}{item.name()} (f)")
+        else:
+            print_dir_structure(item, ts + '\t')
+
 def client_dummy() -> bool:
     """
     A simple script to test the functionality of the server
@@ -26,6 +37,13 @@ def client_dummy() -> bool:
             print(f"Unexpected message of type {recv.message_type()}")
             s.close()
             return False
+        
+        print("Requesting dir structure")
+        s.sendall(DirMessage().construct_message_json().encode())
+        contents = MessageBasis.parse_from_json(s.recv(1024).decode("utf-8"))
+        size = contents.size()
+        contents = MessageBasis.parse_from_json(s.recv(size).decode("utf-8"))
+        print_dir_structure(contents.root())
         
         print("Closing connection")
         s.send(CloseMessage().construct_message_json().encode())
