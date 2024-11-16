@@ -5,12 +5,14 @@ import socket
 from tkinter import font as tkFont
 from tkinter import messagebox
 import bcrypt
-from Common.message_handler import MessageBasis, AckMessage, ConnectMessage, CloseMessage
+from Common.message_handler import MessageBasis, AckMessage, ConnectMessage, CloseMessage, DirMessage
 import json
 
 class FileSharingApp(tk.Tk):
     def __init__(self):
         super().__init__()
+
+        self.con = None
 
         # window configuration
         self.title("File Sharing Platform")
@@ -77,10 +79,10 @@ class FileSharingApp(tk.Tk):
         self.status_label.pack(pady=20)
         self.create_topbar()
 
-    def create_sidebar_button(self, text, command, padding=(10, 10), stateE=tk.ACTIVE):
+    def create_sidebar_button(self, text, command, padding=(10, 10), stateE=tk.NORMAL):
         button = tk.Button(self.sidebar, text=text, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, state=stateE, command=command)
         button.pack(fill="x", pady=padding)
-        self.buttons[text] = button
+        return button
 
     def create_pages(self):
         # Instantiate the pages
@@ -94,7 +96,7 @@ class FileSharingApp(tk.Tk):
     def enable_buttons(self):
         for button in self.buttons.values():
             if button is not None:
-                button.config(state=tk.ACTIVE)
+                button.config(state=tk.NORMAL)
 
     def show_page(self, page_name):
         if page_name not in self.pages:
@@ -176,6 +178,27 @@ class MyFilesPage(Page):
         file_list.insert(tk.END, "File 3")
         file_list.pack(pady=10)
 
+        self.request_files()
+
+    def request_files(self):
+        dir_message = DirMessage()
+        try:
+            if self.master.con is None:
+                print("No connection")
+                return
+            
+            self.master.con.sendall(dir_message.construct_message_json().encode())
+
+            response = self.master.con.recv(1024)
+            if response:
+                files_list = json.loads(response.decode('utf-8'))
+                for file in files_list:
+                    print(file)
+            else:
+                print("No files found.")
+        except Exception as e:
+            print(f"Error: {e}")
+
 class AllFilesPage(Page):
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
@@ -206,7 +229,6 @@ class ConnectPage(Page):
         super().__init__(parent, bg_color, text_color, button_color)
         self.username = ""
         self.password = ""
-        self.con = None
         self.server_ip = "127.0.0.1"
         self.server_port = 8081
         self.load_content()
@@ -216,8 +238,11 @@ class ConnectPage(Page):
         salt = bcrypt.gensalt()
         hashed_password = bcrypt.hashpw(plain_password.encode(), salt)
         return hashed_password
-
+    
     def validate_login(self):
+        threading.Thread(target=self._validate_login).start()
+
+    def _validate_login(self):
         self.username = self.username_entry.get()
         self.password = self.password_entry.get()
         hashed_password = self.hash_password(self.password)
@@ -244,7 +269,7 @@ class ConnectPage(Page):
                 messagebox.showerror("Error", f"Unexpected message of type {message.message_type()}")
                 print(f"Unexpected message of type {message.message_type()}sß")
                 self.con.close()
-            self.master.status_update("Online")
+
             self.master.show_page("My Files")
             self.master.enable_buttons()
             
@@ -255,6 +280,7 @@ class ConnectPage(Page):
         try:
             self.con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.con.connect((self.server_ip, self.server_port))
+            self.master.con = self.con
             self.master.status_update("Online")
         except Exception as e:
             print(f"Error: {e}")
