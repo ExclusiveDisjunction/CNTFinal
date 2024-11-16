@@ -13,6 +13,9 @@ class HttpCodes(Enum):
     Conflict = 409
     ImNotATeapot = 418
 
+    def __int__(self):
+        return self.value
+
 class HTTPErrorBasis:
     """
     Represents an error that can be converted to an ACK message.

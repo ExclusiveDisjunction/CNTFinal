@@ -2,9 +2,9 @@ import os
 from pathlib import Path
 
 from Common.http_codes import *
+from Common.message_handler import SubfolderAction
 from .credentials import Credentials
-from .io_tools import FileType, move_relative, is_path_valid, is_file_owner, get_file_type, get_file_size
-from ..Common.message_handler import SubfolderAction
+from .io_tools import is_path_valid, is_file_owner, set_file_owner
 
 class UploadHandle:
     def __init__(self, path: Path, owner: Credentials):
@@ -12,15 +12,17 @@ class UploadHandle:
         self.owner = owner
 
 def RequestUpload(path: Path, curr_user: Credentials) -> UploadHandle | HTTPErrorBasis: 
-    if path is None or curr_user is None or not path.exists() or not path.is_file():
+    if path is None or curr_user is None:
         return NotFoundError()
 
     if not is_path_valid(path):
         return ForbiddenError()
+    if path.exists(): # File already there
+        return ConflictError("File already exists")
 
     # At this point, we are ok for writing. Send a response back to the front end.
     try:
-        os.mkdirs(os.path.dirname(path), exist_ok = True)
+        path.parent.mkdir(parents=True, exist_ok=True)
         return UploadHandle(path, curr_user)
     except PermissionError:
         return UnauthorizedError("The system does not have access to the resource specified")
@@ -28,12 +30,14 @@ def RequestUpload(path: Path, curr_user: Credentials) -> UploadHandle | HTTPErro
         return ConflictError("File aready exists")
     
 def UploadFile(handle: UploadHandle, content) -> bool:
-    if handle is None or not handle.path.exists():
+    if handle is None:
         return False
 
     try:
-        f = open(handle.path, 'wb')
+        f = open(handle.path, 'w')
         f.write(content)
+
+        set_file_owner(handle.path, handle.owner)
 
         f.close()
         return True
@@ -41,15 +45,15 @@ def UploadFile(handle: UploadHandle, content) -> bool:
         return False
 
 def ExtractFileContents(path: Path, curr_user: Credentials) -> str | HTTPErrorBasis:
-    if path is None or not path.exists:
-        return FileNotFoundError()
+    if path is None or not path.exists():
+        return NotFoundError()
     elif curr_user is None or not is_file_owner(path, curr_user):
         return UnauthorizedError()
     elif not is_path_valid(path):
         return ForbiddenError()
     
     try:
-        f = open(path, 'rb')
+        f = open(path, 'r')
         content = f.read()
 
         f.close()  
@@ -64,7 +68,7 @@ def DeleteFile(path: Path, curr_user: Credentials) -> None | HTTPErrorBasis:
     Deletes a specified path from the file system. This returns None, it was sucessful. Othersie, an error is returned. 
     """
     if path is None or not path.exists():
-        return FileNotFoundError()
+        return NotFoundError()
     elif curr_user is None or not is_file_owner(path, curr_user):
         return UnauthorizedError()
     elif not is_path_valid(path):
@@ -80,7 +84,7 @@ def DeleteFile(path: Path, curr_user: Credentials) -> None | HTTPErrorBasis:
 
 def ModifySubdirectories(path: Path, action: SubfolderAction) -> None | HTTPErrorBasis:
     if path is None:
-        return FileNotFoundError()
+        return NotFoundError()
     elif not is_path_valid(path):
         return ForbiddenError()
     
@@ -89,7 +93,7 @@ def ModifySubdirectories(path: Path, action: SubfolderAction) -> None | HTTPErro
             if path.exists():
                 return ConflictError("Path does exist, but attempted to create it")
             
-            os.makedirs(action, exist_ok=True)
+            os.makedirs(path, exist_ok=True)
 
         case SubfolderAction.Delete:
             if not path.exists():
