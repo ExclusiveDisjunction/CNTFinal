@@ -1,12 +1,12 @@
+import os
 import threading
-import time
 import tkinter as tk
 import socket
 from tkinter import font as tkFont
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import bcrypt
-from Common.message_handler import MessageBasis, AckMessage, ConnectMessage, CloseMessage, DirMessage
-import json
+from Common.message_handler import *
+from Server.io_tools import FileInfo
 
 class FileSharingApp(tk.Tk):
     def __init__(self):
@@ -172,11 +172,11 @@ class MyFilesPage(Page):
 
     def create_content(self):
         self.master.create_topbar("My Files")
-        file_list = tk.Listbox(self, height=10, width=40)
-        file_list.insert(tk.END, "File 1")
-        file_list.insert(tk.END, "File 2")
-        file_list.insert(tk.END, "File 3")
-        file_list.pack(pady=10)
+        self.file_list = tk.Listbox(self, height=30, width=80)
+        self.file_list.pack(pady=10)
+
+        upload_button = tk.Button(self, text="Upload File", command=self.upload_files, font=("Figtree", 14), bg=self.button_color, fg=self.text_color)
+        upload_button.pack(pady=10)
 
         self.request_files()
 
@@ -189,15 +189,109 @@ class MyFilesPage(Page):
             
             self.master.con.sendall(dir_message.construct_message_json().encode())
 
-            response = self.master.con.recv(1024)
-            if response:
-                files_list = json.loads(response.decode('utf-8'))
-                for file in files_list:
-                    print(file)
+            contents = MessageBasis.parse_from_json(self.master.con.recv(1024).decode("utf-8"))
+            size = contents.size()
+            dir_rsp = MessageBasis.parse_from_json(self.master.con.recv(size).decode("utf-8"))
+
+            if dir_rsp is not None and isinstance(dir_rsp, DirMessage):
+                if dir_rsp.code() == 200:
+                    self.file_list.delete(0, tk.END)
+                    self.display_files(dir_rsp.root())
+                else:
+                    print(f"Failed to get directory structure because: {dir_rsp.message()}")
             else:
-                print("No files found.")
+                print("Empty Directory!")
         except Exception as e:
             print(f"Error: {e}")
+
+    def display_files(self, root: DirectoryInfo, ts=''):
+        if root is None:
+            return
+
+        self.file_list.insert(tk.END, f"{ts}{root.name()} (d)")
+        for item in root.contents():
+            if isinstance(item, FileInfo):
+                self.file_list.insert(tk.END, f"{ts + '\t'}{item.name()} (f)")
+            elif isinstance(item, DirectoryInfo):
+                self.display_files(item, ts + '\t')
+
+    def upload_files(self,):
+        threading.Thread(target=self._upload_files).start()
+
+    def _upload_files(self):
+        file_path = filedialog.askopenfilename()
+        if file_path is None or len(file_path) == 0:
+            return
+        
+        file_name = os.path.basename(file_path)
+        file_size = os.path.getsize(file_path)
+        file_kind = self.get_file_kind(file_name)
+
+        upload_message = UploadMessage(file_name, file_size, file_kind)
+
+        try:
+            self.master.con.sendall(upload_message.construct_message_json().encode())
+
+            ack_resp = self.master.con.recv(1024)
+            if not ack_resp:
+                self.show_error("No response from server.")
+                return
+            
+            ack_message = MessageBasis.parse_from_json(ack_resp.decode("utf-8"))
+            if not isinstance(ack_message, AckMessage):
+                self.show_error(f"Unexpected message of type {ack_message.message_type()}")
+                return
+            
+            if ack_message.code() == 100:
+                self.send_file_data(file_path)
+            else:
+                self.show_error(f"Server responded with code {ack_message.code()}: {ack_message.message()}")
+        except Exception as e:
+            self.show_error(f"Error: {e}")
+
+    def get_file_kind(self, file_name):
+        exten = os.path.splitext(file_name)[1].lower()
+        if exten in ['.txt', '.md', '.py', '.java']:
+            return 'text'
+        elif exten in ['.mp3', '.wav']:
+            return 'audio'
+        elif exten in ['.mp4', '.avi', '.mov']:
+            return 'video'
+        else:
+            return 'text'  # default
+        
+    def send_file_data(self, file_path):
+        try:
+            with open(file_path, 'rb') as file:
+                while True:
+                    data_chunk = file.read(1024) # reading file 1KB at a time
+                    if not data_chunk:
+                        break
+                    self.master.con.sendall(data_chunk)
+            
+            final_ack_resp = self.master.con.recv(1024)
+            if not final_ack_resp:
+                self.show_error("No response from server.")
+                return
+            
+            final_ack_message = MessageBasis.parse_from_json(final_ack_resp.decode("utf-8"))
+            if not isinstance(final_ack_message, AckMessage):
+                self.show_error(f"Unexpected message of type {final_ack_message.message_type()}")
+                return
+            
+            if final_ack_message.code() == 200:
+                self.after(0, lambda: messagebox.showinfo("Success", "File uploaded successfully."))
+                # refresh file list
+                self.after(0, self.request_files)
+
+            else:
+                self.show_error(f"Server responded with code {final_ack_message.code()}: {final_ack_message.message()}")
+
+        except Exception as e:
+            self.show_error(f"Error: {e}")  
+
+    def show_error(self, message):
+        self.after(0, lambda: messagebox.showerror("Error", message))
 
 class AllFilesPage(Page):
     def __init__(self, parent, bg_color, text_color, button_color):
@@ -225,6 +319,7 @@ class SettingsPage(Page):
         print(f"Setting saved: {setting}")
 
 class ConnectPage(Page):
+
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
         self.username = ""
@@ -269,9 +364,13 @@ class ConnectPage(Page):
                 messagebox.showerror("Error", f"Unexpected message of type {message.message_type()}")
                 print(f"Unexpected message of type {message.message_type()}sß")
                 self.con.close()
-
-            self.master.show_page("My Files")
-            self.master.enable_buttons()
+            
+            MessageBasis.parse_from_json(contents.decode("utf-8"))
+            if message.code() == 200:
+                self.master.show_page("My Files")
+                self.master.enable_buttons()
+            elif message.code() == 401:
+                messagebox.showerror("Error", "Invalid credentials.")
             
         except Exception as e:
             messagebox.showerror("Error", f"Error: {e}")
