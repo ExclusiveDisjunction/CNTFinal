@@ -1,5 +1,9 @@
 import Server.pool as pool
+<<<<<<< HEAD
 from Server.io_tools import ensure_root_directory
+=======
+from Server.io_tools import ensure_root_directory, file_owner_db
+>>>>>>> server-branch
 from Server.credentials import user_database
 
 threadPool = pool.ThreadPool()
@@ -32,4 +36,8 @@ finally:
     threadPool.kill()
     
 user_database.save()
+<<<<<<< HEAD
+=======
+file_owner_db.save()
+>>>>>>> server-branch
 print("Goodbye!")

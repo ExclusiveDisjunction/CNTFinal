@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Self
 from pathlib import Path
+import json
 import os
 
 from .credentials import Credentials
@@ -181,6 +182,7 @@ class DirectoryInfo:
         else:
             self.__contents = contents
 
+<<<<<<< HEAD
 # Directory Managment
 def contents_to_list(path: Path) -> list[DirectoryInfo | FileInfo]:
     result = []
@@ -211,6 +213,8 @@ def create_directory_info() -> DirectoryInfo:
     result.set_contents(contents_to_list(root_directory))
     return result
 
+=======
+>>>>>>> server-branch
 # Path Management
 def move_relative(raw_path: str, curr_dir: Path) -> Path | None:
     """
@@ -267,6 +271,7 @@ def is_path_valid(path: Path) -> bool:
         return path.parts[0:target_size] == root_directory.parts
 
 # File management
+<<<<<<< HEAD
 def get_file_owner(path) -> str:
     try:
         # return os.getxattr(path, 'user.owner').decode()
@@ -290,6 +295,8 @@ def is_file_owner(path: Path, user: Credentials) -> bool:
     return True
     #return file_owner == user.getUsername()
     
+=======
+>>>>>>> server-branch
 def get_file_type(path: Path) -> FileType | None:
     if path is None:
         return None
@@ -316,3 +323,94 @@ def get_file_size(path: Path | str) -> int | None:
         return os.path.getsize(path)
     except:
         return None
+    
+class FileOwnerDB:
+    def __init__(self, path: Path):
+        if not path.exists():
+            try:
+                path.touch()
+            except:
+                raise ValueError("Could not open file at that path")
+        
+        with open(path, 'r') as f:
+            contents = f.read()
+        
+        if not contents or len(contents) == 0:
+            contents = "{}"
+        
+        self.__data = dict(json.loads(contents))
+        self.__path = path
+
+    def get_file_owner(self, path: Path, is_absolute: bool = True) -> Credentials | None:
+        if is_absolute:
+            path = make_relative(path)
+
+        if path is None:
+            return None
+        
+        result = self.__data.get(str(path))
+        if result is None:
+            return None
+        else:
+            return Credentials(result["username"], result["password"])
+    def set_file_owner(self, path: Path, credentials: Credentials, is_absolute: bool = True):
+        if is_absolute:
+            path = make_relative(path)
+
+        if path is None:
+            raise ValueError("The path provided is not valid")
+        
+        self.__data[str(path)] = {
+            "username": credentials.getUsername(),
+            "password": credentials.getPasswordHash()
+        }
+
+    def save(self):
+        with open(self.__path, 'w') as f:
+            f.write(json.dumps(self.__data))
+
+file_owner_db_path = (root_directory / ".." / "files.json").resolve()
+file_owner_db = FileOwnerDB(file_owner_db_path)
+
+def is_file_owner(path: Path, user: Credentials) -> bool:
+    global file_owner_db
+
+    result = file_owner_db.get_file_owner(path)
+    return result is not None and result == user
+
+# Directory Managment
+def contents_to_list(path: Path) -> list[DirectoryInfo | FileInfo]:
+    global file_owner_db
+    result = []
+
+    for entry in os.listdir(path):
+        try:
+
+            full_path = (path / entry).resolve()
+            if full_path.is_dir():
+                target = DirectoryInfo(entry)
+                target.set_contents(contents_to_list(full_path))
+
+                result.append(target)
+            elif full_path.is_file():
+                raw_owner = file_owner_db.get_file_owner(full_path)
+                if raw_owner is None:
+                    owner = ""
+                else:
+                    owner = raw_owner.getUsername()
+                result.append(
+                    
+                    FileInfo(entry, owner, get_file_type(full_path), get_file_size(full_path))
+                )
+        except:
+            continue
+
+    return result
+
+def create_directory_info() -> DirectoryInfo:
+    global root_directory
+
+    result = DirectoryInfo("root")
+
+    result.set_contents(contents_to_list(root_directory))
+    return result

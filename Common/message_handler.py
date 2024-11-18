@@ -270,7 +270,12 @@ class UploadMessage(MessageBasis):
         try:
             name = data["name"]
             kind = FileType(data["kind"])
-            size = int(data["size"])
+
+            raw_size = data["size"]
+            if raw_size is None:
+                size = 0
+            else: 
+                size = int(raw_size)
         except:
             name = None
             kind = None
