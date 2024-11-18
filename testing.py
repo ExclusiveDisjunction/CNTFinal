@@ -69,10 +69,10 @@ def client_dummy() -> bool:
 def client_test_server() -> bool:
     try:
         ip = input("What is the server IP? (0 for local host, -1 for server external) ")
-        port = input("What is the port? (0 for default) ")
-        if ip == 0:
+        port = int(input("What is the port? (0 for default) "))
+        if ip == "0":
             ip = "127.0.0.1"
-        elif ip == -1:
+        elif ip == "-1":
             ip = "35.184.69.189"
         if port == 0:
             port = 61324
