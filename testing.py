@@ -88,7 +88,7 @@ def client_test_server() -> bool:
             return False
         
         def get_contents(socket, size: int = 1024):
-            return socket.recv(1024).strip(b'\x00').decode("utf-8")
+            return socket.recv(size).strip(b'\x00').decode("utf-8")
         def get_message(socket, size: int = 1024):
             return MessageBasis.parse_from_json(get_contents(socket, size))
         def send_message(socket, message: MessageBasis):

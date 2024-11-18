@@ -4,14 +4,14 @@ from pathlib import Path
 from Common.http_codes import *
 from Common.message_handler import SubfolderAction
 from .credentials import Credentials
-from .io_tools import is_path_valid, is_file_owner, set_file_owner
+from .io_tools import is_path_valid, is_file_owner, file_owner_db
 
 class UploadHandle:
     def __init__(self, path: Path, owner: Credentials):
         self.path = path
         self.owner = owner
 
-def RequestUpload(path: Path, curr_user: Credentials) -> UploadHandle | HTTPErrorBasis: 
+def RequestUpload(path: Path, size: int, curr_user: Credentials) -> UploadHandle | HTTPErrorBasis: 
     if path is None or curr_user is None:
         return NotFoundError()
 
@@ -19,6 +19,8 @@ def RequestUpload(path: Path, curr_user: Credentials) -> UploadHandle | HTTPErro
         return ForbiddenError()
     if path.exists(): # File already there
         return ConflictError("File already exists")
+    if size is None or size == 0:
+        return ConflictError("The file size is zero")
 
     # At this point, we are ok for writing. Send a response back to the front end.
     try:
@@ -30,6 +32,7 @@ def RequestUpload(path: Path, curr_user: Credentials) -> UploadHandle | HTTPErro
         return ConflictError("File aready exists")
     
 def UploadFile(handle: UploadHandle, content) -> bool:
+    global file_owner_db
     if handle is None:
         return False
 
@@ -37,7 +40,7 @@ def UploadFile(handle: UploadHandle, content) -> bool:
         f = open(handle.path, 'w')
         f.write(content)
 
-        set_file_owner(handle.path, handle.owner)
+        file_owner_db.set_file_owner(handle.path, handle.owner)
 
         f.close()
         return True

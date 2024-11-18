@@ -232,7 +232,7 @@ def connection_proc(conn: ConnectionCore) -> None:
                     path, kind, size = message.name(), message.kind(), message.size()
 
                     path = move_relative(path, conn.path())
-                    upload_handle = RequestUpload(path, conn.cred())
+                    upload_handle = RequestUpload(path, size, conn.cred())
                     if isinstance(upload_handle, HTTPErrorBasis):
                         responses.append(upload_handle.to_ack())
                         upload_handle = None
