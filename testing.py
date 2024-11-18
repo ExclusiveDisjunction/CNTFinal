@@ -69,7 +69,7 @@ def client_dummy() -> bool:
 def client_test_server() -> bool:
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect(("127.0.0.1", 8081))
+        s.connect(("35.184.69.189", 61324))
         
         connect = ConnectMessage("hi", "djdlkdjf")
         s.sendall(connect.construct_message_json().encode())
