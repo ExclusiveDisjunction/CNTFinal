@@ -182,39 +182,6 @@ class DirectoryInfo:
         else:
             self.__contents = contents
 
-<<<<<<< HEAD
-# Directory Managment
-def contents_to_list(path: Path) -> list[DirectoryInfo | FileInfo]:
-    result = []
-
-    for entry in os.listdir(path):
-        try:
-
-            full_path = (path / entry).resolve()
-            if full_path.is_dir():
-                target = DirectoryInfo(entry)
-                target.set_contents(contents_to_list(full_path))
-
-                result.append(target)
-            elif full_path.is_file():
-                result.append(
-                    FileInfo(entry, get_file_owner(full_path), get_file_type(full_path), get_file_size(full_path))
-                )
-        except:
-            continue
-
-    return result
-
-def create_directory_info() -> DirectoryInfo:
-    global root_directory
-
-    result = DirectoryInfo("root")
-
-    result.set_contents(contents_to_list(root_directory))
-    return result
-
-=======
->>>>>>> server-branch
 # Path Management
 def move_relative(raw_path: str, curr_dir: Path) -> Path | None:
     """
@@ -223,7 +190,7 @@ def move_relative(raw_path: str, curr_dir: Path) -> Path | None:
     if raw_path is None or curr_dir is None:
         return None
     
-    path = Path(raw_path)
+    path = Path(raw_path) 
     if path.is_absolute():
         return None
     
@@ -271,32 +238,6 @@ def is_path_valid(path: Path) -> bool:
         return path.parts[0:target_size] == root_directory.parts
 
 # File management
-<<<<<<< HEAD
-def get_file_owner(path) -> str:
-    try:
-        # return os.getxattr(path, 'user.owner').decode()
-        pass
-    except (OSError, AttributeError):
-        return None
-    
-def set_file_owner(path, owner: Credentials) -> bool:
-    try:
-        # os.setxattr(path, 'user.owner', owner.getUsername().encode())
-        return True
-    
-    except (OSError, AttributeError):
-        return False  
-    
-def is_file_owner(path: Path, user: Credentials) -> bool:
-    if path is None or user is None or not path.exists():
-        return False
-
-    file_owner = get_file_owner(path)
-    return True
-    #return file_owner == user.getUsername()
-    
-=======
->>>>>>> server-branch
 def get_file_type(path: Path) -> FileType | None:
     if path is None:
         return None

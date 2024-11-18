@@ -1,9 +1,5 @@
 from pathlib import Path
 import json
-<<<<<<< HEAD
-from typing import Self
-=======
->>>>>>> server-branch
 
 class Credentials:
     def __init__(self, username: str, passwordHash: str):
