@@ -1,175 +1,12 @@
-from enum import Enum
+from Common.file_io import FileType, get_file_type
 from typing import Self
 from pathlib import Path
 import json
 import os
 
 from .credentials import Credentials
-from .server_paths import root_directory, file_owner_db_path
-
-class Status(Enum):
-    FILE_NOT_FOUND = 'File not found'
-    PATH_INVALID = 'Path invalid'
-    UNAUTHORIZED = 'Unauthorized'
-    SUCCESS = 'Success'
-
-class FileType(Enum):
-    Text = "text"
-    Audio = "audio"
-    Video = "video"
-
-class FileInfo:
-    """
-    A structure that contains the path & allows for relative moving
-    """
-
-    def __init__(self, name: str | str, owner_username, kind: FileType, size: int, parent = None):
-        self.__parent = parent
-        self.__name = name
-        self.__owner = owner_username
-        self.__kind = kind
-
-    def to_dict(self) -> dict:
-        return {
-            "kind": "file",
-            "name": self.__name,
-            "file_kind": self.__kind.value,
-            "owner": self.__owner
-        }
-    def from_dict(data: dict, parent = None) -> Self:
-        try:
-            name = data["name"]
-            file_kind = FileType(data["file_kind"])
-            owner = data["owner"]
-        except:
-            name = None
-            file_kind = None
-            owner = None
-
-        if name == None or file_kind == None:
-            raise ValueError("The dictionary does not contain enough data to fill this structure")
-        
-        return FileInfo(name, owner, file_kind, parent)
-          
-    def __eq__(self, other) -> bool:
-        if self is None and other is None:
-            return True
-        elif self is None or other is None:
-            return False
-        
-        return self.__name == other.__name and self.__owner == other.__owner and self.__kind == other.__kind
-    
-    def name(self) -> str:
-        return self.__name
-    def kind(self) -> FileType:
-        return self.__kind
-    def owner_username(self) -> str:
-        return self.__owner
-    def parent(self):
-        return self.__parent
-    def set_parent(self, parent):
-        self.__parent = parent
-    
-    def target_path_relative(self) -> Path:
-        """
-        Returns the current path relative to the root
-        """
-
-        if self.__parent is None:
-            return None
-        
-        return self.__parent.targt_path_relative().joinpath(self.__name)
-    
-    def target_path_absolute(self, env_path: Path) -> str:
-        """
-        Returns the current path relative to the OS root
-        """
-        return env_path.joinpath(self.target_path_relative())
-
-class DirectoryInfo:
-    def __init__(self, name: str, contents: list[FileInfo | Self] | None = None, parent: Self | None = None):
-        self.__name = name
-        if contents is None:
-            self.__contents = []
-        else:
-            self.__contents = contents
-
-        self.__parent = parent
-
-        # Build proper order
-        for content in self.__contents:
-            if content is not None:
-                content.set_parent(self)
-
-    def to_dict(self) -> dict:
-        contents = []
-        for item in self.__contents:
-            contents.append(item.to_dict())
-        return {
-            "kind": "directory",
-            "name": self.__name,
-            "contents": contents
-        } 
-    def from_dict(data: dict) -> Self | None:
-        try:
-            name = data["name"]
-            contents = list(data["contents"])
-        except:
-            name = None
-            contents = None
-        
-        if name == None or contents == None:
-            raise ValueError("The contents could not be read")
-        
-        trueContents = []
-        for info in contents:
-            if info["kind"] == "directory":
-                trueContents.append(DirectoryInfo.from_dict(info))
-            elif info["kind"] == "file":
-                trueContents.append(FileInfo.from_dict(info))
-
-        return DirectoryInfo(name, trueContents)
-    
-    def __eq__(self, other) -> bool:
-        if other is None and self is None:
-            return True
-        elif other is None or self is None:
-            return False
-        else:
-            return self.__name == other.__name and self.__files == other.__files and self.__dirs == other.__dirs
-        
-    def name(self) -> str:
-        return self.__name
-    def parent(self) -> Self | None:
-        return self.__parent
-    def set_parent(self, parent: Self | None):
-        self.__parent = parent
-
-    def target_path_relative(self) -> Path:
-        """
-        Returns the current path relative to the root
-        """
-
-        if self.__parent is None:
-            return Path("")
-        else:
-            return self.__parent.target_path_relative().joinpath(self.__name)
-    
-    def target_path_absolute(self, env_path: Path) -> str:
-        """
-        Returns the current path relative to the OS root
-        """
-        return env_path.joinpath(self.target_path_relative())
-        
-    def add_content(self, content):
-        self.__contents.append(content)
-    def contents(self):
-        return self.__contents
-    def set_contents(self, contents: list[Self | FileInfo] | None):
-        if contents is None:
-            self.__contents = []
-        else:
-            self.__contents = contents
+from .server_paths import root_directory
+from Common.file_io import FileInfo, DirectoryInfo, get_file_total_size
 
 # Path Management
 def move_relative(raw_path: str, curr_dir: Path) -> Path | None:
@@ -226,34 +63,7 @@ def is_path_valid(path: Path) -> bool:
     else:
         return path.parts[0:target_size] == root_directory.parts
 
-# File management
-def get_file_type(path: Path) -> FileType | None:
-    if path is None:
-        return None
-    
-    match path.suffix:
-        case ".mp4" | ".mov" | ".avi" | ".wmv":
-            return FileType.Video
-        case ".mp3" | ".wav" | ".aac" | ".flac" | ".aiff":
-            return FileType.Audio
-        case _:
-            return FileType.Text
-        
-def get_file_size(path: Path | str) -> int | None:
-    if path is None:
-        return None
-    
-    if isinstance(path, str):
-        path = Path(path)
-    
-    if not path.is_file():
-        return None
-    
-    try:
-        return os.path.getsize(path)
-    except:
-        return None
-    
+# File management  
 class FileOwnerDB:
     def __init__(self):
         self.__path = None
@@ -303,7 +113,6 @@ class FileOwnerDB:
         with open(self.__path, 'w') as f:
             f.write(json.dumps(self.__data))
 
-
 file_owner_db = FileOwnerDB()
 
 def is_file_owner(path: Path, user: Credentials) -> bool:
@@ -334,7 +143,7 @@ def contents_to_list(path: Path) -> list[DirectoryInfo | FileInfo]:
                     owner = raw_owner.getUsername()
                 result.append(
                     
-                    FileInfo(entry, owner, get_file_type(full_path), get_file_size(full_path))
+                    FileInfo(entry, owner, get_file_type(full_path), get_file_total_size(full_path))
                 )
         except:
             continue

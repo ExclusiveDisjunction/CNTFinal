@@ -19,7 +19,6 @@ class MessageType(Enum):
     Connect = "connect"
     Close = "close"
     Ack = "ack"
-    Size = "size"
     Upload = "upload"
     Download = "download"
     Delete = "delete"
@@ -116,8 +115,6 @@ class MessageBasis:
                     return CloseMessage.parse(data, req)
                 case MessageType.Ack:
                     return AckMessage.parse(data, req)
-                case MessageType.Size:
-                    return SizeMessage.parse(data, req)
                 case MessageType.Upload:
                     return UploadMessage.parse(data, req)
                 case MessageType.Download:
@@ -210,36 +207,6 @@ class CloseMessage(MessageBasis):
             raise ValueError("Close message has no response variant")
 
         return CloseMessage()
-    
-class SizeMessage(MessageBasis):
-    """
-    A message that transmits the size needed to send the next message
-    """
-    def __init__(self, size: int):
-        self.__size = size
-
-    def message_type(self) -> MessageType:
-        return MessageType.Size
-    def data(self) -> dict:
-        return {
-            "size": self.__size
-        }
-    def data_response(self) -> dict:
-        return self.data()
-    
-    def size(self) -> int:
-        return self.__size
-    
-    def parse(data: dict, req: bool = True) -> Self:
-        try:
-            size = data["size"]
-        except:
-            size = None
-
-        if size is None:
-            raise ValueError("The size member was not provided")
-        
-        return SizeMessage(size)
     
 class UploadMessage(MessageBasis):
     def __init__(self, name: str, kind: FileType, size: int):
@@ -431,7 +398,7 @@ class DeleteMessage(MessageBasis):
 class DirMessage(MessageBasis):
     def __init__(self, *args):
         """
-        If no arguments are provided, the message is a request. Otherwise, it expects 4 arguments: code, message, curr_dir, and root. 
+        If no arguments are provided, the message is a request. Otherwise, it expects 4 arguments: code, message, curr_dir, and size. 
         """
 
         if len(args) == 0:
@@ -439,17 +406,29 @@ class DirMessage(MessageBasis):
         elif len(args) == 4:
             code = args[0]
             message = args[1]
-            curr_dir = Path(args[2])
-            root = args[3]
 
-            if not isinstance(root, DirectoryInfo):
-                raise ValueError("The root must be a directory info")
+            curr_dir_raw = args[2]
+            size_raw = args[3]
+
+            if curr_dir_raw is None:
+                curr_dir = Path("")
+            elif not isinstance(curr_dir_raw, Path):
+                curr_dir = Path(curr_dir_raw)
+            else:
+                curr_dir = curr_dir_raw
+            
+            if size_raw is None:
+                size = 0
+            elif not isinstance(size_raw, int):
+                size = int(size)
+            else:
+                size = size_raw
 
             self.__is_response = True
             self.__code = code
             self.__message = message
             self.__curr_dir = curr_dir
-            self.__root = root
+            self.__size = size
         else:
             raise ValueError("Not enough arguments or too many")
 
@@ -468,7 +447,7 @@ class DirMessage(MessageBasis):
             "response": self.__code,
             "message": self.__message,
             "curr_dir": str(self.__curr_dir),
-            "root": self.__root.to_dict()
+            "size": self.__size
         }
     
     def is_request(self) -> bool:
@@ -491,11 +470,11 @@ class DirMessage(MessageBasis):
             return None
         else:
             return self.__curr_dir
-    def root(self) -> DirectoryInfo | None:
+    def size(self) -> int | None:
         if self.is_request():
             return None
         else:
-            return self.__root
+            return self.__size
     
     def parse(data: dict, req: bool = True) -> Self:
         if req:
@@ -505,17 +484,17 @@ class DirMessage(MessageBasis):
                 code = int(data["response"])
                 message = data["message"]
                 curr_dir = data["curr_dir"]
-                root = DirectoryInfo.from_dict(dict(data["root"]))
+                size = int(data["size"])
             except:
                 code = None
                 message = None
                 curr_dir = None
-                root = None
-            
-            if code == None or message == None or curr_dir == None or root == None:
+                size = None
+
+            if code == None or message == None or curr_dir == None or size == None:
                 raise ValueError("The dictionary does not provide enough information, or the root directory is of invalid format")
             else:
-                return DirMessage(code, message, curr_dir, root)
+                return DirMessage(code, message, curr_dir, size)
 
 class MoveMessage(MessageBasis):
     def __init__(self, path: Path | str):
