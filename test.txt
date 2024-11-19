@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 I am a test file to send back and forth between the server
+=======
+Hello there my strange friend
+>>>>>>> server-branch

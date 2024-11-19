@@ -68,8 +68,18 @@ def client_dummy() -> bool:
 
 def client_test_server() -> bool:
     try:
+        ip = input("What is the server IP? (0 for local host, -1 for server external) ")
+        port = int(input("What is the port? (0 for default) "))
+        if ip == "0":
+            ip = "127.0.0.1"
+        elif ip == "-1":
+            ip = "35.184.69.189"
+        if port == 0:
+            port = 61324
+
+
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect(("127.0.0.1", 8081))
+        s.connect((ip, port))
         
         connect = ConnectMessage("hi", "djdlkdjf")
         s.sendall(connect.construct_message_json().encode())
@@ -88,7 +98,7 @@ def client_test_server() -> bool:
             return False
         
         def get_contents(socket, size: int = 1024):
-            return socket.recv(1024).strip(b'\x00').decode("utf-8")
+            return socket.recv(size).strip(b'\x00').decode("utf-8")
         def get_message(socket, size: int = 1024):
             return MessageBasis.parse_from_json(get_contents(socket, size))
         def send_message(socket, message: MessageBasis):

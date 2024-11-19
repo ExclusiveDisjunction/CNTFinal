@@ -1,6 +1,8 @@
 import Server.pool as pool
-from Server.io_tools import ensure_root_directory
+from Server.io_tools import ensure_root_directory, file_owner_db
 from Server.credentials import user_database
+
+import socket
 
 threadPool = pool.ThreadPool()
 
@@ -11,10 +13,11 @@ if not ensure_root_directory():
 else:
     print("Root directory established/already exists")
 
-port = 8081
-ip = "127.0.0.1"
+hostname = socket.gethostname()
+ip = socket.gethostbyname(hostname)
+port = 61324
 
-print(f"Setting up thread pool, binding on port {port}")
+print(f"Setting up thread pool, binding on port {port} with IP {ip}")
 try:
     threadPool.bind(port, ip)
     threadPool.listen()
@@ -32,4 +35,5 @@ finally:
     threadPool.kill()
     
 user_database.save()
+file_owner_db.save()
 print("Goodbye!")
