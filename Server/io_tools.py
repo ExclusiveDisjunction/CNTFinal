@@ -232,9 +232,9 @@ def get_file_type(path: Path) -> FileType | None:
         return None
     
     match path.suffix:
-        case (".mp4", ".mov", ".avi", ".wmv"):
+        case ".mp4" | ".mov" | ".avi" | ".wmv":
             return FileType.Video
-        case (".mp3", ".wav", ".aac", ".flac", ".aiff"):
+        case ".mp3" | ".wav" | ".aac" | ".flac" | ".aiff":
             return FileType.Audio
         case _:
             return FileType.Text

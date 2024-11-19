@@ -4,9 +4,9 @@ import tkinter as tk
 import socket
 from tkinter import font as tkFont
 from tkinter import messagebox, filedialog
-import bcrypt
+import hashlib
 from Common.message_handler import *
-from Server.io_tools import FileInfo
+from Server.io_tools import FileInfo, get_file_type, FileType
 
 class FileSharingApp(tk.Tk):
     def __init__(self):
@@ -94,6 +94,8 @@ class FileSharingApp(tk.Tk):
         self.pages["Connect"] = ConnectPage(self, self.bg_color, self.text_color, self.button_color)
 
     def enable_buttons(self):
+        if "Connect" in self.buttons:
+            self.buttons["Connect"].config(state=tk.DISABLED)
         for button in self.buttons.values():
             if button is not None:
                 button.config(state=tk.NORMAL)
@@ -189,7 +191,7 @@ class MyFilesPage(Page):
             
             self.master.con.sendall(dir_message.construct_message_json().encode())
 
-            contents = MessageBasis.parse_from_json(self.master.con.recv(1024).decode("utf-8"))
+            contents = MessageBasis.parse_from_json(self.master.con.recv(1024).strip(b'\x00').decode("utf-8"))
             size = contents.size()
             dir_rsp = MessageBasis.parse_from_json(self.master.con.recv(size).decode("utf-8"))
 
@@ -225,31 +227,37 @@ class MyFilesPage(Page):
         
         file_name = os.path.basename(file_path)
         file_size = os.path.getsize(file_path)
-        file_kind = self.get_file_kind(file_name)
+        file_kind = get_file_type(Path(file_name))
 
-        upload_message = UploadMessage(file_name, file_size, file_kind)
+        upload_message = UploadMessage(file_name, file_kind, file_size)
 
         try:
+            print("HERE 3")
             self.master.con.sendall(upload_message.construct_message_json().encode())
+            print("HERE 4")
 
-            ack_resp = self.master.con.recv(1024)
+            ack_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
             if not ack_resp:
                 self.show_error("No response from server.")
+                print("HERE")
                 return
-            
-            ack_message = MessageBasis.parse_from_json(ack_resp.decode("utf-8"))
+            print(ack_resp)
+            ack_message = MessageBasis.parse_from_json(ack_resp)
             if not isinstance(ack_message, AckMessage):
                 self.show_error(f"Unexpected message of type {ack_message.message_type()}")
+                print("HERE2")
                 return
             
-            if ack_message.code() == 100:
+            if ack_message.code() == 200:
                 self.send_file_data(file_path)
             else:
                 self.show_error(f"Server responded with code {ack_message.code()}: {ack_message.message()}")
         except Exception as e:
-            self.show_error(f"Error: {e}")
+            self.show_error(f"Error Test: {e}")
 
-    def get_file_kind(self, file_name):
+    def get_file_kind(self, file_name) -> FileType:
+        return get_file_type(Path(file_name))
+
         exten = os.path.splitext(file_name)[1].lower()
         if exten in ['.txt', '.md', '.py', '.java']:
             return 'text'
@@ -264,17 +272,17 @@ class MyFilesPage(Page):
         try:
             with open(file_path, 'rb') as file:
                 while True:
-                    data_chunk = file.read(1024) # reading file 1KB at a time
-                    if not data_chunk:
+                    contents = file.read()
+                    if not contents:
                         break
-                    self.master.con.sendall(data_chunk)
+                    self.master.con.sendall(contents)
             
-            final_ack_resp = self.master.con.recv(1024)
+            final_ack_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
             if not final_ack_resp:
                 self.show_error("No response from server.")
                 return
             
-            final_ack_message = MessageBasis.parse_from_json(final_ack_resp.decode("utf-8"))
+            final_ack_message = MessageBasis.parse_from_json(final_ack_resp)
             if not isinstance(final_ack_message, AckMessage):
                 self.show_error(f"Unexpected message of type {final_ack_message.message_type()}")
                 return
@@ -288,7 +296,7 @@ class MyFilesPage(Page):
                 self.show_error(f"Server responded with code {final_ack_message.code()}: {final_ack_message.message()}")
 
         except Exception as e:
-            self.show_error(f"Error: {e}")  
+            self.show_error(f"Error Test2: {e}")  
 
     def show_error(self, message):
         self.after(0, lambda: messagebox.showerror("Error", message))
@@ -325,13 +333,12 @@ class ConnectPage(Page):
         self.username = ""
         self.password = ""
         self.server_ip = "127.0.0.1"
-        self.server_port = 8081
+        self.server_port = 61324
         self.load_content()
         self.create_connection()
 
     def hash_password(self, plain_password):
-        salt = bcrypt.gensalt()
-        hashed_password = bcrypt.hashpw(plain_password.encode(), salt)
+        hashed_password = hashlib.sha256(plain_password.encode()).hexdigest()
         return hashed_password
     
     def validate_login(self):
@@ -342,7 +349,9 @@ class ConnectPage(Page):
         self.password = self.password_entry.get()
         hashed_password = self.hash_password(self.password)
 
-        connect_message = ConnectMessage(username=self.username, passwordHash=hashed_password.decode())
+        connect_message = ConnectMessage(username=self.username, passwordHash=hashed_password)
+        temp_thing = connect_message.construct_message_json()
+        decoded = MessageBasis.parse_from_json(temp_thing)
         try:
             self.con.sendall(connect_message.construct_message_json().encode())
 
