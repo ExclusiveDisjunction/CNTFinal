@@ -232,20 +232,16 @@ class MyFilesPage(Page):
         upload_message = UploadMessage(file_name, file_kind, file_size)
 
         try:
-            print("HERE 3")
             self.master.con.sendall(upload_message.construct_message_json().encode())
-            print("HERE 4")
 
             ack_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
             if not ack_resp:
                 self.show_error("No response from server.")
-                print("HERE")
                 return
             print(ack_resp)
             ack_message = MessageBasis.parse_from_json(ack_resp)
             if not isinstance(ack_message, AckMessage):
                 self.show_error(f"Unexpected message of type {ack_message.message_type()}")
-                print("HERE2")
                 return
             
             if ack_message.code() == 200:
@@ -257,22 +253,13 @@ class MyFilesPage(Page):
 
     def get_file_kind(self, file_name) -> FileType:
         return get_file_type(Path(file_name))
-
-        exten = os.path.splitext(file_name)[1].lower()
-        if exten in ['.txt', '.md', '.py', '.java']:
-            return 'text'
-        elif exten in ['.mp3', '.wav']:
-            return 'audio'
-        elif exten in ['.mp4', '.avi', '.mov']:
-            return 'video'
-        else:
-            return 'text'  # default
         
     def send_file_data(self, file_path):
         try:
             with open(file_path, 'rb') as file:
                 while True:
                     contents = file.read()
+                    print(len(contents))
                     if not contents:
                         break
                     self.master.con.sendall(contents)

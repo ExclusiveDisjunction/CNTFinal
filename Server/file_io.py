@@ -38,6 +38,7 @@ def UploadFile(handle: UploadHandle, content) -> bool:
 
     try:
         f = open(handle.path, 'wb')
+        print(len(content))
         f.write(content)
 
         file_owner_db.set_file_owner(handle.path, handle.owner)
