@@ -1,6 +1,8 @@
 from pathlib import Path
 import json
 
+from .server_paths import user_database_loc
+
 class Credentials:
     def __init__(self, username: str, passwordHash: str):
 
@@ -43,6 +45,9 @@ class UserDatabase:
             raise ValueError("Could not load database from that path")
         
     def get_user(self, username: str) -> None | Credentials:
+        if not isinstance(username, str):
+            username = str(username)
+
         if username in self.__users:
             return Credentials(username, self.__users[username])
         else:
@@ -56,5 +61,4 @@ class UserDatabase:
             contents = json.dumps(self.__users)
             f.write(contents)
 
-user_database_loc = Path.home() / "cnt" / "users.json"
-user_database = UserDatabase(user_database_loc)
+user_database = None

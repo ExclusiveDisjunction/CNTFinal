@@ -5,24 +5,13 @@ import json
 import os
 
 from .credentials import Credentials
+from .server_paths import root_directory, file_owner_db_path
 
 class Status(Enum):
     FILE_NOT_FOUND = 'File not found'
     PATH_INVALID = 'Path invalid'
     UNAUTHORIZED = 'Unauthorized'
     SUCCESS = 'Success'
-
-root_directory = Path.home() / "cnt" / "data"
-
-def ensure_root_directory() -> bool:
-    global root_directory
-    
-    try:
-        if not root_directory.exists():
-            os.makedirs(root_directory)
-        return True
-    except:
-        return False
 
 class FileType(Enum):
     Text = "text"
@@ -310,8 +299,8 @@ class FileOwnerDB:
         with open(self.__path, 'w') as f:
             f.write(json.dumps(self.__data))
 
-file_owner_db_path = (root_directory / ".." / "files.json").resolve()
-file_owner_db = FileOwnerDB(file_owner_db_path)
+
+file_owner_db = None
 
 def is_file_owner(path: Path, user: Credentials) -> bool:
     global file_owner_db

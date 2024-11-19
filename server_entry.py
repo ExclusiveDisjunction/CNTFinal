@@ -1,17 +1,20 @@
 import Server.pool as pool
-from Server.io_tools import ensure_root_directory, file_owner_db
-from Server.credentials import user_database
+from Server.server_paths import ensure_directories, file_owner_db_path, user_database_loc
+from Server.io_tools import file_owner_db, FileOwnerDB
+from Server.credentials import user_database, UserDatabase
 
 import socket
 
-threadPool = pool.ThreadPool()
-
 print("Ensuring root directory exists...")
-if not ensure_root_directory():
+if not ensure_directories():
     print("Could not establish root directory. Aborting.")
     quit(1)
 else:
     print("Root directory established/already exists")
+
+threadPool = pool.ThreadPool()
+user_database = UserDatabase(user_database_loc)
+file_owner_db = FileOwnerDB(file_owner_db_path)
 
 hostname = socket.gethostname()
 ip = socket.gethostbyname(hostname)
