@@ -13,12 +13,17 @@ else:
     print("Root directory established/already exists")
 
 threadPool = pool.ThreadPool()
-user_database = UserDatabase(user_database_loc)
-file_owner_db = FileOwnerDB(file_owner_db_path)
+user_database.open(user_database_loc)
+file_owner_db.open(file_owner_db_path)
 
 hostname = socket.gethostname()
 ip = socket.gethostbyname(hostname)
-port = 61324
+
+port_raw = int(input("Port? (0 for default)"))
+if port_raw == 0:
+    port = 61324
+else:
+    port = port_raw
 
 print(f"Setting up thread pool, binding on port {port} with IP {ip}")
 try:

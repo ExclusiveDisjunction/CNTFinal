@@ -255,7 +255,11 @@ def get_file_size(path: Path | str) -> int | None:
         return None
     
 class FileOwnerDB:
-    def __init__(self, path: Path):
+    def __init__(self):
+        self.__path = None
+        self.__data = None
+
+    def open(self, path: Path):
         if not path.exists():
             try:
                 path.touch()
@@ -300,7 +304,7 @@ class FileOwnerDB:
             f.write(json.dumps(self.__data))
 
 
-file_owner_db = None
+file_owner_db = FileOwnerDB()
 
 def is_file_owner(path: Path, user: Credentials) -> bool:
     global file_owner_db

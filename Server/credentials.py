@@ -23,7 +23,11 @@ class Credentials:
             return self.__username == obj.__username and self.__passwordHash == obj.__passwordHash
         
 class UserDatabase:
-    def __init__(self, path: Path):
+    def __init__(self):
+        self.__path = None
+        self.__users = None
+        
+    def open(self, path: Path):
         if path is None:
             raise ValueError("Path must not be none")
         
@@ -43,7 +47,7 @@ class UserDatabase:
         
         if self.__users is None:
             raise ValueError("Could not load database from that path")
-        
+
     def get_user(self, username: str) -> None | Credentials:
         if not isinstance(username, str):
             username = str(username)
@@ -61,4 +65,4 @@ class UserDatabase:
             contents = json.dumps(self.__users)
             f.write(contents)
 
-user_database = None
+user_database = UserDatabase()
