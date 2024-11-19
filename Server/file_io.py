@@ -37,7 +37,7 @@ def UploadFile(handle: UploadHandle, content) -> bool:
         return False
 
     try:
-        f = open(handle.path, 'w')
+        f = open(handle.path, 'wb')
         f.write(content)
 
         file_owner_db.set_file_owner(handle.path, handle.owner)
@@ -56,7 +56,7 @@ def ExtractFileContents(path: Path, curr_user: Credentials) -> str | HTTPErrorBa
         return ForbiddenError()
     
     try:
-        f = open(path, 'r')
+        f = open(path, 'rb')
         content = f.read()
 
         f.close()  

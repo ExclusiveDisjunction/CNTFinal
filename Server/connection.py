@@ -175,8 +175,6 @@ def connection_proc(conn: ConnectionCore) -> None:
                 conn.drop()
                 return
             
-            contents = contents.decode()
-            
             # We need to treat this as a file, not a message
             if upload_handle is not None and isinstance(upload_handle, UploadHandle):
                 result = UploadFile(upload_handle, contents)
@@ -194,6 +192,8 @@ def connection_proc(conn: ConnectionCore) -> None:
                 buff_size_prev = None
                 size_was_set = None
                 continue
+
+            contents = contents.decode()
             
             try:
                 message = MessageBasis.parse_from_json(contents)
@@ -313,6 +313,8 @@ def connection_proc(conn: ConnectionCore) -> None:
                             conn.conn().send(response_str.encode())
                     elif isinstance(response, str):
                         conn.conn().send(response.encode())
+                    else:
+                        conn.conn().send(response) # Binary
 
             if size_was_set is not None and size_was_set < cyc_count and buff_size_prev is not None:
                 buff_size = buff_size_prev 
