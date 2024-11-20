@@ -186,9 +186,13 @@ class MyFilesPage(Page):
         )
         self.path_label.pack(pady=(5,0))
         
+        # Create a frame to hold ".." and "Open Folder" buttons
+        nav_frame = tk.Frame(self, bg=self.bg_color)
+        nav_frame.pack(pady=5)
+
         # Adds button to go up directory
         up_dir_button = Button(
-            self,
+            nav_frame,
             text="..",
             command=self.move_up_directory,
             font=("Figtree", 12),
@@ -196,12 +200,25 @@ class MyFilesPage(Page):
             fg=self.text_color,
             borderless=1
         )
-        up_dir_button.pack(pady=5)
+        up_dir_button.pack(side=tk.LEFT, padx=5)
+
+        # Adds the "Open Folder" button next to ".."
+        self.open_folder_button = Button(
+            nav_frame,
+            text="Open Folder",
+            command=self.open_selected_folder,
+            font=("Figtree", 12),
+            bg=self.button_color,
+            fg=self.text_color,
+            borderless=1,
+            state=tk.DISABLED  # Initially disabled
+        )
+        self.open_folder_button.pack(side=tk.LEFT, padx=5)
 
         self.file_list = tk.Listbox(self, height=30, width=80, selectforeground=self.text_color, selectbackground=self.button_color, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
         self.file_list.pack(pady=10)
         self.file_list.bind("<<ListboxSelect>>", self.on_file_select)
-        self.file_list.bind("<Double-Button-1>", self.move_directory) # Currently not working
+        # self.file_list.bind("<Double-Button-1>", self.on_double_click) # Currently not working
 
         button_frame = tk.Frame(self, bg=self.bg_color)
         button_frame.pack(pady=10)
@@ -219,6 +236,24 @@ class MyFilesPage(Page):
         self.create_subfolder_button.pack(side=tk.RIGHT, padx=10)
 
         self.request_files()
+    
+    def open_selected_folder(self, event=None):
+        try:
+            selected_indices = self.file_list.curselection()
+            if not selected_indices:
+                return
+
+            selected_index = selected_indices[0]
+            selected_item = self.file_list.get(selected_index)
+            
+            if selected_item.endswith(" (d)"):
+                item_name = selected_item[:-4]  # Removes the last 4 characters " (d)"
+                self.move_directory(item_name)
+            else:
+                self.show_error("Selected item is not a directory.")
+
+        except Exception as e:
+            self.show_error(f"Error handling double-click: {e}")
 
     def request_files(self):
         dir_message = DirMessage()
@@ -227,11 +262,13 @@ class MyFilesPage(Page):
                 print("No connection")
                 return
             
+            print(f"Requesting files for current directory")  # Debug log
             self.master.con.sendall(dir_message.construct_message_json().encode())
 
             dir_resp = MessageBasis.parse_from_json(self.master.con.recv(1024).strip(b'\x00').decode("utf-8"))
             code, message, curr, size = dir_resp.code(), dir_resp.message(), dir_resp.curr_dir(), dir_resp.size()
             
+            print(f"Received directory response - curr_dir: {curr}")  # Debug log
             self.current_dir = curr
             
             self.master.con.sendall(AckMessage(200, "OK").construct_message_json().encode())
@@ -244,6 +281,7 @@ class MyFilesPage(Page):
                 # Update path display
                 path_text = f"Path: /{self.current_dir}" if self.current_dir else "Path: /"
                 self.path_label.config(text=path_text)
+                print(f"Updated path display to: {path_text}")  # Debug log
             else:
                 print(f"Failed to get directory structure because: {message}")  
         except Exception as e:
@@ -399,33 +437,25 @@ class MyFilesPage(Page):
         except Exception as e:
             print(f"Error: {e}")
 
-    def move_directory(self):
-        threading.Thread(target=self._move_directory).start()
+    def move_directory(self, move_path):
+        threading.Thread(target=self._move_directory, args=(move_path,)).start()
 
-    def _move_directory(self):
+    def _move_directory(self, move_path):
         try:
-            selected_index = self.file_list.curselection()
-            if not selected_index:
-                return
-                
-            selected_item = self.file_list.get(selected_index)
-            item_name, item_type = selected_item.split(" ")
+            print(f"Moving to directory: {move_path}")  # Debug log
+            # Send move message to server
+            self.master.con.sendall(MoveMessage(move_path).construct_message_json().encode())
             
-            if item_type == "(d)":
-                # Send move message to server
-                move_path = item_name
-                self.master.con.sendall(MoveMessage(move_path).construct_message_json().encode())
-                
-                # Get server response
-                move_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
-                move_message = MessageBasis.parse_from_json(move_resp)
-                
-                if move_message is not None and isinstance(move_message, AckMessage):
-                    if move_message.code() == 200:
-                        # Only update UI after successful server response
-                        self.request_files()  # This will update file list and current_dir
-                    else:
-                        self.show_error(f"Failed to move to directory: {move_message.message()}")
+            # Get server response
+            move_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
+            move_message = MessageBasis.parse_from_json(move_resp)
+            
+            if move_message and isinstance(move_message, AckMessage):
+                if move_message.code() == 200:
+                    # Only update UI after successful server response
+                    self.request_files()  # This will update file list and current_dir
+                else:
+                    self.show_error(f"Failed to move to directory: {move_message.message()}")
                         
         except Exception as e:
             self.show_error(f"Error during directory navigation: {e}")
@@ -448,19 +478,28 @@ class MyFilesPage(Page):
             self.show_error(f"Error moving up directory: {e}")
     
     def update_button_states(self):
-        selected_index = self.file_list.curselection()
-        if not selected_index:
+        selected_indices = self.file_list.curselection()
+        if not selected_indices:
             self.download_button.config(state=tk.DISABLED)
             self.delete_button.config(state=tk.DISABLED)
+            self.open_folder_button.config(state=tk.DISABLED)
             return
+
+        selected_index = selected_indices[0]
         selected_item = self.file_list.get(selected_index)
-        item_name, item_type = selected_item.split(" ")
-        if item_type == "(f)":
+        if selected_item.endswith(" (f)"):
             self.download_button.config(state=tk.NORMAL)
             self.delete_button.config(state=tk.NORMAL)
-        else:
+            self.open_folder_button.config(state=tk.DISABLED)
+        elif selected_item.endswith(" (d)"):
             self.download_button.config(state=tk.DISABLED)
             self.delete_button.config(state=tk.DISABLED)
+            self.open_folder_button.config(state=tk.NORMAL)
+        else:
+            # In case the format is unexpected
+            self.download_button.config(state=tk.DISABLED)
+            self.delete_button.config(state=tk.DISABLED)
+            self.open_folder_button.config(state=tk.DISABLED)
 
     def on_file_select(self, event):
         self.update_button_states()
