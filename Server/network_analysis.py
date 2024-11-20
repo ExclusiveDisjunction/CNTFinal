@@ -71,7 +71,6 @@ class NetworkAnalyzer:
         )
         
         self.stats["transfers"].append(stat)
-        self.save_stats()
         return stat.__dict__
 
     # Calculates data rate in MB/s
