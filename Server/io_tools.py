@@ -150,10 +150,14 @@ def contents_to_list(path: Path) -> list[DirectoryInfo | FileInfo]:
 
     return result
 
-def create_directory_info() -> DirectoryInfo:
+def create_directory_info(start_path: Path = None) -> DirectoryInfo:
+    """Create directory info starting from specified path"""
     global root_directory
-
-    result = DirectoryInfo("root")
-
-    result.set_contents(contents_to_list(root_directory))
+    
+    if start_path is None:
+        start_path = root_directory
+    
+    base_name = start_path.name if start_path != root_directory else "root"
+    result = DirectoryInfo(base_name)
+    result.set_contents(contents_to_list(start_path))
     return result
