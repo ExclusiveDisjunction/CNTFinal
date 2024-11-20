@@ -1,7 +1,8 @@
 import Server.pool as pool
-from Server.server_paths import ensure_directories, file_owner_db_path, user_database_loc
+from Server.server_paths import ensure_directories, file_owner_db_path, user_database_loc, network_analyzer_path
 from Server.io_tools import file_owner_db, FileOwnerDB
 from Server.credentials import user_database, UserDatabase
+from Server.network_analysis import network_analyzer
 
 import socket
 
@@ -15,6 +16,7 @@ else:
 threadPool = pool.ThreadPool()
 user_database.open(user_database_loc)
 file_owner_db.open(file_owner_db_path)
+network_analyzer.open(network_analyzer_path)
 
 hostname = socket.gethostname()
 ip = socket.gethostbyname(hostname)
@@ -44,4 +46,5 @@ finally:
     
 user_database.save()
 file_owner_db.save()
+network_analyzer.save()
 print("Goodbye!")

@@ -1,6 +1,6 @@
 import json
 from enum import Enum
-from typing import Self
+from typing import Self, Any
 from pathlib import Path
 
 from Server.io_tools import DirectoryInfo, FileType
@@ -25,6 +25,7 @@ class MessageType(Enum):
     Dir = "dir"
     Move = "move"
     Subfolder = "subfolder"
+    Stats = "stats"
 
 class MessageBasis:
     """
@@ -127,6 +128,8 @@ class MessageBasis:
                     return MoveMessage.parse(data, req)
                 case MessageType.Subfolder:
                     return SubfolderMessage.parse(data, req)
+                case MessageType.Stats:
+                    return StatsMessage.parse(data, req)
         except:
             return None
 
@@ -557,3 +560,64 @@ class SubfolderMessage(MessageBasis):
             raise ValueError("Not enough data supplied")
         else:
             return SubfolderMessage(path, action)
+        
+class StatsMessage(MessageBasis):
+    def __init__(self, *args):
+        """
+        If the args contains no elements, it is a request. Otherwise, it expexts the data rates, file transfer times, and latency.
+        """
+
+        if len(args) == 0:
+            self.__request = True
+            self.__data_rates = None
+            self.__file_transfer_time = None
+            self.__latency = None
+
+        elif len(args) == 3:
+            self.__request = False
+
+            self.__data_rates = args[0]
+            self.__file_transfer_time = args[1]
+            self.__latency = args[2]
+
+        else:
+            raise ValueError("Too many or not enough arguments")
+        
+    def data(self) -> dict:
+        return {}
+    def data_response(self) -> dict:
+        return {
+            "data_rate": self.__data_rates,
+            "file_transfer": self.__file_transfer_time,
+            "latency": self.__latency
+        }
+    
+    def is_request(self) -> bool:
+        return self.__request
+    def is_response(self) -> bool:
+        return not self.__request
+    
+    def data_rates(self) -> Any | None:
+        return self.__data_rates
+    def file_transfer_time(self) -> Any | None:
+        return self.__file_transfer_time
+    def latency(self) -> Any | None:
+        return self.__latency
+    
+    def parse(data: dict, req: bool = True) -> Self:
+        if req:
+            return StatsMessage()
+        else:
+            try:
+                data_rates = data["data_rate"]
+                file_transfer = data["file_transfer"]
+                latency = data["latency"]
+            except:
+                data_rates = None
+                file_transfer = None
+                latency = None
+
+            if data_rates == None or file_transfer == None or latency == None:
+                raise ValueError("The dictionary does not provide enough information, or the root directory is of invalid format")
+            else:
+                return StatsMessage(data_rates, file_transfer, latency)
