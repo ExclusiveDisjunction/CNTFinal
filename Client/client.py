@@ -171,12 +171,37 @@ class Page(tk.Frame):
 class MyFilesPage(Page):
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
+        self.current_dir = None
 
     def create_content(self):
         self.master.create_topbar("My Files")
+
+        # Adds a label to display the current path
+        self.path_label = tk.Label(
+            self,
+            text="Path: /",
+            font=("Figtree", 12),
+            fg=self.text_color,
+            bg=self.bg_color
+        )
+        self.path_label.pack(pady=(5,0))
+        
+        # Adds button to go up directory
+        up_dir_button = Button(
+            self,
+            text="..",
+            command=self.move_up_directory,
+            font=("Figtree", 12),
+            bg=self.button_color,
+            fg=self.text_color,
+            borderless=1
+        )
+        up_dir_button.pack(pady=5)
+
         self.file_list = tk.Listbox(self, height=30, width=80, selectforeground=self.text_color, selectbackground=self.button_color, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
         self.file_list.pack(pady=10)
         self.file_list.bind("<<ListboxSelect>>", self.on_file_select)
+        self.file_list.bind("<Double-Button-1>", self.move_directory) # Currently not working
 
         button_frame = tk.Frame(self, bg=self.bg_color)
         button_frame.pack(pady=10)
@@ -207,28 +232,30 @@ class MyFilesPage(Page):
             dir_resp = MessageBasis.parse_from_json(self.master.con.recv(1024).strip(b'\x00').decode("utf-8"))
             code, message, curr, size = dir_resp.code(), dir_resp.message(), dir_resp.curr_dir(), dir_resp.size()
             
+            self.current_dir = curr
+            
             self.master.con.sendall(AckMessage(200, "OK").construct_message_json().encode())
             
             if code == 200:
-                self.file_list.delete(0, tk.END)
-                dir_struct = receive_network_file_binary(self.master.con, size).decode("utf-8")
-                dir_struct = DirectoryInfo.from_dict(dict(json.loads(dir_struct)))
+                dir_struct_data = receive_network_file_binary(self.master.con, size).decode("utf-8")
+                dir_struct = DirectoryInfo.from_dict(json.loads(dir_struct_data))
                 self.display_files(dir_struct)
+                
+                # Update path display
+                path_text = f"Path: /{self.current_dir}" if self.current_dir else "Path: /"
+                self.path_label.config(text=path_text)
             else:
                 print(f"Failed to get directory structure because: {message}")  
         except Exception as e:
             print(f"Error: {e}")
 
-    def display_files(self, root: DirectoryInfo, ts=''):
-        if root is None:
-            return
-
-        self.file_list.insert(tk.END, f"{ts}{root.name()} (d)")
-        for item in root.contents():
+    def display_files(self, dir_info):
+        self.file_list.delete(0, tk.END)
+        for item in dir_info.contents():
             if isinstance(item, FileInfo):
-                self.file_list.insert(tk.END, f"{ts + '\t'}{item.name()} (f)")
+                self.file_list.insert(tk.END, f"{item.name()} (f)")
             elif isinstance(item, DirectoryInfo):
-                self.display_files(item, ts + '\t')
+                self.file_list.insert(tk.END, f"{item.name()} (d)")
 
     def upload_files(self):
         threading.Thread(target=self._upload_files).start()
@@ -371,10 +398,64 @@ class MyFilesPage(Page):
             self.after(0, self.update_button_states)
         except Exception as e:
             print(f"Error: {e}")
+
+    def move_directory(self):
+        threading.Thread(target=self._move_directory).start()
+
+    def _move_directory(self):
+        try:
+            selected_index = self.file_list.curselection()
+            if not selected_index:
+                return
+                
+            selected_item = self.file_list.get(selected_index)
+            item_name, item_type = selected_item.split(" ")
+            
+            if item_type == "(d)":
+                # Send move message to server
+                move_path = item_name
+                self.master.con.sendall(MoveMessage(move_path).construct_message_json().encode())
+                
+                # Get server response
+                move_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
+                move_message = MessageBasis.parse_from_json(move_resp)
+                
+                if move_message is not None and isinstance(move_message, AckMessage):
+                    if move_message.code() == 200:
+                        # Only update UI after successful server response
+                        self.request_files()  # This will update file list and current_dir
+                    else:
+                        self.show_error(f"Failed to move to directory: {move_message.message()}")
+                        
+        except Exception as e:
+            self.show_error(f"Error during directory navigation: {e}")
+
+    def move_up_directory(self):
+        try:
+            # Send move message with ".." to go up one level
+            self.master.con.sendall(MoveMessage("..").construct_message_json().encode())
+            
+            move_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
+            move_message = MessageBasis.parse_from_json(move_resp)
+            
+            if move_message is not None and isinstance(move_message, AckMessage):
+                if move_message.code() == 200:
+                    self.request_files()  # Update file list and current_dir
+                else:
+                    self.show_error(f"Failed to move up: {move_message.message()}")
+                    
+        except Exception as e:
+            self.show_error(f"Error moving up directory: {e}")
     
     def update_button_states(self):
-        selected_indices = self.file_list.curselection()
-        if selected_indices:
+        selected_index = self.file_list.curselection()
+        if not selected_index:
+            self.download_button.config(state=tk.DISABLED)
+            self.delete_button.config(state=tk.DISABLED)
+            return
+        selected_item = self.file_list.get(selected_index)
+        item_name, item_type = selected_item.split(" ")
+        if item_type == "(f)":
             self.download_button.config(state=tk.NORMAL)
             self.delete_button.config(state=tk.NORMAL)
         else:
