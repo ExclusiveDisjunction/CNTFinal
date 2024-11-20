@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from typing import Dict, Any
 from dataclasses import dataclass
 
 @dataclass
@@ -12,9 +11,13 @@ class TransferStats:
     transfer_type: str # 'upload' or 'download'
 
 class NetworkAnalyzer:
-    def __init__(self, stats_file: str = "network_stats.json"):
-        self.stats_file = stats_file
-        self.stats: Dict[str, list[TransferStats]] = {
+    def __init__(self):
+        self.stats_file = None
+        self.stats = None
+
+    def open(self, path: Path):
+        self.stats_file = path
+        self.stats = { 
             "transfers": []
         }
         self._load_stats()
@@ -23,7 +26,11 @@ class NetworkAnalyzer:
     def _load_stats(self):
         try:
             with open(self.stats_file, 'r') as f:
-                data = json.load(f)
+                contents = f.read()
+                if contents is None or len(contents) == 0:
+                    contents = "{}"
+
+                data = json.loads(contents)
                 # Convert dictionary data back to TransferStats objects
                 self.stats["transfers"] = [
                     TransferStats(**transfer) for transfer in data["transfers"]
@@ -32,7 +39,7 @@ class NetworkAnalyzer:
             self.stats = {"transfers": []}
 
     # Saves statistics to file
-    def save_stats(self):
+    def save(self):
         with open(self.stats_file, 'w') as f:
             # Convert TransferStats objects to dictionaries
             data = {
