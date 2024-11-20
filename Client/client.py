@@ -4,6 +4,7 @@ import tkinter as tk
 import socket
 from tkinter import font as tkFont
 from tkinter import messagebox, filedialog
+from tkmacosx import Button
 import hashlib
 from Common.message_handler import *
 from Common.file_io import FileInfo, get_file_type, FileType, read_file_for_network, DirectoryInfo, receive_network_file_binary, receive_network_file
@@ -63,7 +64,6 @@ class FileSharingApp(tk.Tk):
         self.sidebar.pack(side="left", fill="y")
 
         self.buttons["My Files"] = self.create_sidebar_button("My Files", self.show_my_files, padding=(75, 10), stateE=tk.DISABLED)
-        self.buttons["All Files"] = self.create_sidebar_button("All Files", self.show_all_files, stateE=tk.DISABLED)
         self.buttons["Performance"] = self.create_sidebar_button("Performance", self.show_performance, stateE=tk.DISABLED)
         
         self.buttons["Settings"] = self.create_sidebar_button("Settings", self.show_settings, padding=(375,10), stateE=tk.DISABLED)
@@ -80,14 +80,13 @@ class FileSharingApp(tk.Tk):
         self.create_topbar()
 
     def create_sidebar_button(self, text, command, padding=(10, 10), stateE=tk.NORMAL):
-        button = tk.Button(self.sidebar, text=text, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, state=stateE, command=command)
+        button = Button(self.sidebar, text=text, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, state=stateE, command=command, borderless=1)
         button.pack(fill="x", pady=padding)
         return button
 
     def create_pages(self):
         # Instantiate the pages
         self.pages["My Files"] = MyFilesPage(self, self.bg_color, self.text_color, self.button_color)
-        self.pages["All Files"] = AllFilesPage(self, self.bg_color, self.text_color, self.button_color)
         self.pages["Performance"] = PerformancePage(self, self.bg_color, self.text_color, self.button_color)
         
         self.pages["Settings"] = SettingsPage(self, self.bg_color, self.text_color, self.button_color)
@@ -176,15 +175,19 @@ class MyFilesPage(Page):
         self.master.create_topbar("My Files")
         self.file_list = tk.Listbox(self, height=30, width=80)
         self.file_list.pack(pady=10)
+        self.file_list.bind("<<ListboxSelect>>", self.on_file_select)
 
         button_frame = tk.Frame(self, bg=self.bg_color)
         button_frame.pack(pady=10)
 
-        upload_button = tk.Button(button_frame, text="Upload File", command=self.upload_files, font=("Figtree", 14), bg=self.button_color, fg=self.text_color)
-        upload_button.pack(side=tk.LEFT, padx=10)
+        self.upload_button = Button(button_frame, text="Upload File", command=self.upload_files, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1)
+        self.upload_button.pack(side=tk.LEFT, padx=10)
 
-        download_button = tk.Button(button_frame, text="Download File", command=self.download_files, font=("Figtree", 14), bg=self.button_color, fg=self.text_color)
-        download_button.pack(side=tk.RIGHT, padx=10)
+        self.download_button = Button(button_frame, text="Download File", command=self.download_files, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1, state=tk.DISABLED)
+        self.download_button.pack(side=tk.RIGHT, padx=10)
+
+        self.delete_button = Button(button_frame, text="Delete File", command=self.delete_files, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1, state=tk.DISABLED)
+        self.delete_button.pack(side=tk.RIGHT, padx=10)
 
         self.request_files()
 
@@ -255,7 +258,7 @@ class MyFilesPage(Page):
             else:
                 self.show_error(f"Server responded with code E: {ack_message.code()}: {ack_message.message()}")
         except Exception as e:
-            self.show_error(f"Error Test: {e}")
+            self.show_error(f"Error: {e}")
 
     def get_file_kind(self, file_name) -> FileType:
         return get_file_type(Path(file_name))
@@ -320,17 +323,39 @@ class MyFilesPage(Page):
                     print(f"Failed to download file because: {download_message.message()}")
         except Exception as e:
             print(f"Error: {e}")
+
+    def delete_files(self):
+        threading.Thread(target=self._delete_files).start()
+
+    def _delete_files(self):
+        try:
+            selected_file = self.file_list.get(self.file_list.curselection())
+            if selected_file is None or len(selected_file) == 0:
+                return
+            file_name = selected_file.split(" ")[0].strip()
+            self.master.con.sendall(DeleteMessage(file_name).construct_message_json().encode())
+
+            delete_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
+            delete_message = MessageBasis.parse_from_json(delete_resp)
+            if delete_message is not None and isinstance(delete_message, AckMessage):
+                if delete_message.code() == 200:
+                    print("File deleted successfully.")
+                    self.after(0, self.request_files)
+                else:
+                    print(f"Failed to delete file because: {delete_message.message()}")
+        except Exception as e:
+            print(f"Error: {e}")
+    
+    def on_file_select(self, event):
+        if len(self.file_list.curselection()) == 0:
+            self.download_button.config(state=tk.DISABLED)
+            self.delete_button.config(state=tk.DISABLED)
+        else:
+            self.download_button.config(state=tk.NORMAL)
+            self.delete_button.config(state=tk.NORMAL)
             
     def show_error(self, message):
         self.after(0, lambda: messagebox.showerror("Error", message))
-
-class AllFilesPage(Page):
-    def __init__(self, parent, bg_color, text_color, button_color):
-        super().__init__(parent, bg_color, text_color, button_color)
-
-    def create_content(self):
-        raise NotImplementedError("Subclasses should implement this method.")
-        
 
 class PerformancePage(Page):
     def __init__(self, parent, bg_color, text_color, button_color):
@@ -438,5 +463,5 @@ class ConnectPage(Page):
         self.password_entry = tk.Entry(self, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color, show="*")
         self.password_entry.pack(pady=10)
 
-        self.login_button = tk.Button(self, text="Login", font=("Figtree", 14), bg=self.button_color, fg=self.text_color, command=self.validate_login)
+        self.login_button = Button(self, text="Login", font=("Figtree", 14), bg=self.button_color, fg=self.text_color, command=self.validate_login)
         self.login_button.pack(pady=10)
