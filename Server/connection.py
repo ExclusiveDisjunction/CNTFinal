@@ -3,8 +3,9 @@ from socket import socket as soc
 
 from .credentials import *
 from .io_tools import root_directory, move_relative, create_directory_info, make_relative, get_file_type
-from .file_io import *
+from .server_io import *
 from Common.message_handler import *
+from Common.file_io import receive_network_file, read_file_for_network, split_binary_for_network
 
 class ConnectionCore:
     def __init__(self, conn: soc, addr, path: Path):
@@ -98,15 +99,21 @@ class Connection:
             self.__core = None
 
 def recv_message(connection: soc, buff_size: int) -> MessageBasis | None:
-    contents = connection.recv(buff_size)
+    try:
+        contents = connection.recv(buff_size)
+    except:
+        contents = None
+
     if contents is None or len(contents) == 0:
-        return False
+        return None
     
     result = MessageBasis.parse_from_json(contents)
     if result is None:
         return None
     else:
         return result
+def send_message(connection: soc, message: MessageBasis, response: bool = True):
+    connection.sendall(message.construct_message_json(request=not response).encode())
 
 def connection_proc(conn: ConnectionCore) -> None:
     global user_database
@@ -139,7 +146,7 @@ def connection_proc(conn: ConnectionCore) -> None:
         else:
             connect_ack = AckMessage(HttpCodes.Ok, f"Welcome back, '{target_cred.getUsername()}'")
 
-    conn.conn().send(connect_ack.construct_message_json().encode())
+    send_message(conn.conn(), connect_ack)
     if not keep_connection:
         print(f"[{addr_str}] Authentication failed for user. Closing connection")
         conn.unlock()
@@ -151,62 +158,19 @@ def connection_proc(conn: ConnectionCore) -> None:
         conn.unlock()
 
     buff_size = 1024
-    buff_size_prev = None
-    size_was_set = None
-    cyc_count = 0
-
-    upload_handle = None
 
     try:
         while conn.lock():
             # This is our message loop. It will accept messages, process them, and then perform the actions needed.
-
-            try:
-                contents = conn.conn().recv(buff_size)
-            except OSError:
-                print(f"[{addr_str}] Connection terminated")
+            
+            message = recv_message(conn.conn(), buff_size)
+            if message is None:
+                print(f"[{addr_str}] Connection terminated or invalid format with message")
                 conn.unlock()
                 conn.drop()
                 return
             
-            if len(contents) == 0 or contents is None:
-                print(f"[{addr_str}] Connection terminated")
-                conn.unlock()
-                conn.drop()
-                return
-            
-            contents = contents.decode()
-            
-            # We need to treat this as a file, not a message
-            if upload_handle is not None and isinstance(upload_handle, UploadHandle):
-                result = UploadFile(upload_handle, contents)
-                upload_handle = None
-
-                if result:
-                    response = AckMessage(200, "OK")
-                else:
-                    response = AckMessage(HttpCodes.Conflict, "Unable to upload file")
-
-                conn.conn().sendall(response.construct_message_json().encode())
-                conn.unlock()
-                upload_handle = None
-                buff_size = buff_size_prev
-                buff_size_prev = None
-                size_was_set = None
-                continue
-            
-            try:
-                message = MessageBasis.parse_from_json(contents)
-            except:
-                message = None
-            finally:
-                if message is None:
-                    print(f"[{addr_str}] Invalid format, the connection message was invalid or not received")
-                    conn.unlock()
-                    conn.drop()
-                    return
-            
-            print(f"[{addr_str}] Processing request of kind {message.message_type()}")
+            print(f"[{addr_str}] Processing request of kind {message.message_type().value}")
 
             responses = []
             match message.message_type():
@@ -218,15 +182,7 @@ def connection_proc(conn: ConnectionCore) -> None:
                     responses.append(AckMessage(200, "Goodbye!"))
 
                 case MessageType.Ack:
-                    responses.append(AckMessage(418, "Server cannot receive an ack"))
-
-                case MessageType.Size:
-                    if size_was_set is None or size_was_set >= cyc_count: # Happened in the past
-                        buff_size_prev = buff_size
-
-                    buff_size = message.size()
-                    size_was_set = cyc_count
-                    # Size has no response 
+                    print(f"[{addr_str}] Got ack with code {message.code()}, message '{message.message()}'")
 
                 case MessageType.Upload:
                     path, kind, size = message.name(), message.kind(), message.size()
@@ -237,13 +193,13 @@ def connection_proc(conn: ConnectionCore) -> None:
                         responses.append(upload_handle.to_ack())
                         upload_handle = None
                     else:
-                        responses.append(AckMessage(200, "OK"))
-                        
-                        if size_was_set is None or size_was_set >= cyc_count: # Happened in the past
-                            buff_size_prev = buff_size
+                        send_message(conn.conn(), AckMessage(200, "OK"))
 
-                        buff_size = size
-                        size_was_set = cyc_count
+                        # Now we get our file
+                        if UploadFile(upload_handle, conn.conn(), size):
+                            responses.append(AckMessage(200, "OK"))
+                        else:
+                            responses.append(AckMessage(HttpCodes.Conflict, "File upload failed"))
 
                 case MessageType.Download:
                     path = message.path()
@@ -257,8 +213,21 @@ def connection_proc(conn: ConnectionCore) -> None:
                         kind = get_file_type(path)
                         size = len(file_contents)
 
-                        responses.append(DownloadMessage(HttpCodes.Ok, "OK", kind, size))
-                        responses.append(file_contents)
+                        send_message(conn.conn(), DownloadMessage(HttpCodes.Ok, "OK", kind, size))
+                        
+                        try:
+                            ack = recv_message(conn.conn(), buff_size)
+                            if ack is None or not isinstance(ack, AckMessage):
+                                raise ValueError("Could not parse ack")
+                            
+                            if ack.code() == 200:
+                                for item in file_contents:
+                                    conn.conn().sendall(item)
+
+                            else:
+                                print(f'[{addr_str}] Upload failed because of {ack.message()}')
+                        except Exception as e:
+                            responses.append(AckMessage(HttpCodes.Conflict, str(e)))
 
                 case MessageType.Delete:
                     path = message.path()
@@ -275,12 +244,22 @@ def connection_proc(conn: ConnectionCore) -> None:
                         responses.append(DirMessage(401, "Not signed in", None, None))
                     else:
                         dir_structure = create_directory_info()
-                        curr_dir = make_relative(conn.path())
-                        dir_as_str = DirMessage(200, "OK", curr_dir, dir_structure).construct_message_json(request=False)
+                        dir_contents = json.dumps(dir_structure.to_dict()).encode()
+                        network_dir = split_binary_for_network(dir_contents)
 
-                        size = len(dir_as_str)
-                        responses.append(SizeMessage(size))
-                        responses.append(dir_as_str)
+                        curr_dir = make_relative(conn.path())
+
+                        send_message(conn.conn(), DirMessage(200, "OK", curr_dir, len(network_dir)))
+                        ack = recv_message(conn.conn(), buff_size)
+                        if ack is None or not isinstance(ack, AckMessage):
+                            print(f"[{addr_str}] Invalid ack received for dir message")
+                            continue
+
+                        if ack.code() != HttpCodes.Ok.value:
+                            print(f"[{addr_str}] Dir failed, client responded with '{ack.message()}'")
+
+                        for item in network_dir:
+                            conn.conn().sendall(item)
                         
                 case MessageType.Move:
                     path = message.path()
@@ -301,26 +280,22 @@ def connection_proc(conn: ConnectionCore) -> None:
                         responses.append(AckMessage(200, "OK"))
                     else:
                         responses.append(result.to_ack())
+                case MessageType.Stats:
+                    # Get stats
+                    responses.append(StatsMessage(0, 0, 0))
 
             print(f"[{addr_str}] Response contains {len(responses)} message(s)")
             if responses is not None and len(responses) != 0:
                 for response in responses:
                     if isinstance(response, MessageBasis):
-                        response_str = response.construct_message_json(request=False)
-                        if isinstance(response, SizeMessage) or (isinstance(response, DownloadMessage) and response.is_response()):
-                            conn.conn().send(response_str.encode().ljust(1024, b'\x00'))
-                        else:
-                            conn.conn().send(response_str.encode())
+                        send_message(conn.conn(), response)
                     elif isinstance(response, str):
                         conn.conn().send(response.encode())
+                    else:
+                        conn.conn().send(response) # Binary
 
-            if size_was_set is not None and size_was_set < cyc_count and buff_size_prev is not None:
-                buff_size = buff_size_prev 
-                size_was_set = None
-                buff_size_prev = None
-
-            cyc_count += 1
             conn.unlock()
+
     except OSError as e:
         print(f"OSError caught: {str(e)}\nClosing connection")
         conn.unlock()

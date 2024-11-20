@@ -1,8 +1,10 @@
 import os
 from pathlib import Path
+from socket import socket
 
 from Common.http_codes import *
 from Common.message_handler import SubfolderAction
+from Common.file_io import receive_network_file, read_file_for_network
 from .credentials import Credentials
 from .io_tools import is_path_valid, is_file_owner, file_owner_db
 
@@ -31,36 +33,43 @@ def RequestUpload(path: Path, size: int, curr_user: Credentials) -> UploadHandle
     except:
         return ConflictError("File aready exists")
     
-def UploadFile(handle: UploadHandle, content) -> bool:
+def UploadFile(handle: UploadHandle, socket: socket, frame_size: int) -> bool:
     global file_owner_db
     if handle is None:
         return False
 
     try:
-        f = open(handle.path, 'w')
-        f.write(content)
+        if not receive_network_file(handle.path, socket, frame_size):
+            try:
+                os.remove(handle.path)
+            except: # We dont really care, its just to make sure the old file isn't kept.
+                pass
+
+            return False
 
         file_owner_db.set_file_owner(handle.path, handle.owner)
-
-        f.close()
         return True
     except:
         return False
 
-def ExtractFileContents(path: Path, curr_user: Credentials) -> str | HTTPErrorBasis:
+def ExtractFileContents(path: Path, curr_user: Credentials) -> list[bytes] | HTTPErrorBasis:
     if path is None or not path.exists():
         return NotFoundError()
     elif curr_user is None or not is_file_owner(path, curr_user):
-        return UnauthorizedError()
+        if file_owner_db.get_file_owner(path) is None:
+            file_owner_db.set_file_owner(path, curr_user)
+        else:
+            return UnauthorizedError()
     elif not is_path_valid(path):
         return ForbiddenError()
     
     try:
-        f = open(path, 'r')
-        content = f.read()
-
-        f.close()  
-        return content
+        result = read_file_for_network(path)
+        if result is None:
+            return ConflictError("Could not read file")
+        else:
+            return result
+        
     except PermissionError:
         return UnauthorizedError()
     except:
@@ -83,7 +92,6 @@ def DeleteFile(path: Path, curr_user: Credentials) -> None | HTTPErrorBasis:
         return UnauthorizedError("Permission denied")
     except Exception:
         return ConflictError("Could not delete the file")
-
 
 def ModifySubdirectories(path: Path, action: SubfolderAction) -> None | HTTPErrorBasis:
     if path is None:

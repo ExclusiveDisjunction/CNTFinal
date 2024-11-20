@@ -1,7 +1,8 @@
 import Server.pool as pool
-from Server.server_paths import ensure_directories, file_owner_db_path, user_database_loc
+from Server.server_paths import ensure_directories, file_owner_db_path, user_database_loc, network_analyzer_path
 from Server.io_tools import file_owner_db, FileOwnerDB
 from Server.credentials import user_database, UserDatabase
+from Server.network_analysis import network_analyzer
 
 import socket
 
@@ -13,12 +14,18 @@ else:
     print("Root directory established/already exists")
 
 threadPool = pool.ThreadPool()
-user_database = UserDatabase(user_database_loc)
-file_owner_db = FileOwnerDB(file_owner_db_path)
+user_database.open(user_database_loc)
+file_owner_db.open(file_owner_db_path)
+network_analyzer.open(network_analyzer_path)
 
 hostname = socket.gethostname()
 ip = socket.gethostbyname(hostname)
-port = 61324
+
+port_raw = int(input("Port? (0 for default)"))
+if port_raw == 0:
+    port = 61324
+else:
+    port = port_raw
 
 print(f"Setting up thread pool, binding on port {port} with IP {ip}")
 try:
@@ -39,4 +46,5 @@ finally:
     
 user_database.save()
 file_owner_db.save()
+network_analyzer.save()
 print("Goodbye!")

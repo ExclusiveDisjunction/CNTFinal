@@ -1,5 +1,5 @@
 from Common.message_handler import *
-from Server.io_tools import DirectoryInfo, FileInfo, FileType, get_file_size
+from Common.file_io import DirectoryInfo, FileInfo, FileType, read_file_for_network, receive_network_file, receive_network_file_binary
 import socket
 
 def print_dir_structure(dir: DirectoryInfo, ts = ''):
@@ -12,59 +12,6 @@ def print_dir_structure(dir: DirectoryInfo, ts = ''):
             print(f"{ts+'\t'}{item.name()} (f)")
         else:
             print_dir_structure(item, ts + '\t')
-
-def client_dummy() -> bool:
-    """
-    A simple script to test the functionality of the server
-    """
-
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect(("127.0.0.1", 8081))
-        
-        connect = ConnectMessage("hi", "djdlkdjf")
-        s.sendall(connect.construct_message_json().encode())
-
-        contents = s.recv(1024)
-        if contents is None or len(contents) == 0:
-            print("Connection terminated")
-            s.close()
-
-            return False
-
-        recv = MessageBasis.parse_from_json(contents.decode("utf-8"))
-        if not isinstance(recv, AckMessage):
-            print(f"Unexpected message of type {recv.message_type()}")
-            s.close()
-            return False
-        
-        print("Requesting dir structure")
-        s.sendall(DirMessage().construct_message_json().encode())
-        contents = MessageBasis.parse_from_json(s.recv(1024).decode("utf-8"))
-        size = contents.size()
-        contents = MessageBasis.parse_from_json(s.recv(size).decode("utf-8"))
-        print_dir_structure(contents.root())
-        
-        print("Closing connection")
-        s.send(CloseMessage().construct_message_json().encode())
-
-        contents = s.recv(1024)
-        if contents is None or len(contents) == 0:
-            print("Connection terminated")
-            s.close()
-
-            return False
-
-        recv = MessageBasis.parse_from_json(contents.decode("utf-8"))
-        if not isinstance(recv, AckMessage):
-            print(f"Unexpected message of type {recv.message_type()}")
-            s.close()
-            return False
-
-        return True
-    except Exception as e:
-        print(f"Caught {str(e)}")
-        return False
 
 def client_test_server() -> bool:
     try:
@@ -104,17 +51,20 @@ def client_test_server() -> bool:
         def send_message(socket, message: MessageBasis):
             socket.send(message.construct_message_json().encode())
 
-        send_message(s, UploadMessage(Path("test.txt"), FileType.Text, get_file_size("test.txt")))
+        target_path = Path("audio.m4a")
+        file_contents = read_file_for_network(target_path)
+        send_message(s, UploadMessage(target_path, FileType.Audio, len(file_contents)))
         ack = get_message(s)
         if ack is not None and isinstance(ack, AckMessage):
             if ack.code() != 200:
                 print(f"Upload failed because '{ack.message()}'")
             else:
-                with open(Path("test.txt").resolve(), 'r') as f:
-                    contents = f.read()
-                
-                s.sendall(contents.encode())
+                sent_count = 0
+                for item in file_contents:
+                    s.sendall(item)
+                    sent_count += 1
 
+                assert sent_count == len(file_contents), "Failed to send all items"
                 ack = get_message(s)
                 if ack is not None and isinstance(ack, AckMessage):
                     if ack.code() != 200:
@@ -125,37 +75,45 @@ def client_test_server() -> bool:
         send_message(s, DownloadMessage("thingone.txt"))
         download_resp = get_message(s)
         if download_resp is not None and isinstance(download_resp, DownloadMessage):
+            send_message(s, AckMessage(200, "OK"))
             if download_resp.status() == 200:
                 print("Downloading file")
                 size = download_resp.size()
-                contents = get_contents(s, size)
-                with open(Path("testone.txt").resolve(), 'w') as f:
-                    f.write(contents)
+                receive_network_file(Path("thingone.txt"), s, size)
                 
                 print("Download success")
             else:
                 print(f"Download failed because of reason: {download_resp.message()}")
         
 
+        """         
         send_message(s, DeleteMessage("thingone.txt"))
         ack = get_message(s)
         if ack is not None and isinstance(ack, AckMessage):
             if ack.code() == 200:
                 print("Deleted file success")
-            else:
+            else:   
                 print(f"Failed to delete because '{ack.message()}'")
+        """
 
         send_message(s, DirMessage())
-        size_message = get_message(s)
-        dir_resp = get_message(s, size_message.size())
+        dir_resp = get_message(s)
         if dir_resp is not None and isinstance(dir_resp, DirMessage):
-            if dir_resp.code() == 200:
-                print("Directory structure:\n")
-                print_dir_structure(dir_resp.root())
-                print("")
-            else:
-                print(f"Failed to get directory structure because: {dir_resp.message()}")
+            code, message, curr, size = dir_resp.code(), dir_resp.message(), dir_resp.curr_dir(), dir_resp.size()
 
+            send_message(s, AckMessage(200, "OK"))
+
+            if code != 200:
+                print(f"Failed to get directory structure because '{message}'")
+            else:
+                dir_structure = receive_network_file_binary(s, size).decode("utf-8")
+                dir_structure = DirectoryInfo.from_dict(dict(json.loads(dir_structure)))
+
+                print("Directory structure: \n")
+                print_dir_structure(dir_structure)
+                print("")
+
+        """
         send_message(s, MoveMessage("dir_one"))
         ack = get_message(s)
         if ack is not None and isinstance(ack, AckMessage):
@@ -171,6 +129,7 @@ def client_test_server() -> bool:
                 print("Subfolder add successful")
             else:
                 print(f"Could not add subdirectory because of '{ack.message()}'")
+        """
         
         
         print("Closing connection")
