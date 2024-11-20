@@ -280,6 +280,9 @@ def connection_proc(conn: ConnectionCore) -> None:
                         responses.append(AckMessage(200, "OK"))
                     else:
                         responses.append(result.to_ack())
+                case MessageType.Stats:
+                    # Get stats
+                    responses.append(StatsMessage(0, 0, 0))
 
             print(f"[{addr_str}] Response contains {len(responses)} message(s)")
             if responses is not None and len(responses) != 0:
