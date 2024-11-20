@@ -92,7 +92,7 @@ def client_test_server() -> bool:
         if ack is not None and isinstance(ack, AckMessage):
             if ack.code() == 200:
                 print("Deleted file success")
-            else:
+            else:   
                 print(f"Failed to delete because '{ack.message()}'")
         """
 

@@ -6,7 +6,7 @@ from tkinter import font as tkFont
 from tkinter import messagebox, filedialog
 import hashlib
 from Common.message_handler import *
-from Server.io_tools import FileInfo, get_file_type, FileType
+from Common.file_io import FileInfo, get_file_type, FileType, read_file_for_network, DirectoryInfo, receive_network_file_binary
 
 class FileSharingApp(tk.Tk):
     def __init__(self):
@@ -191,18 +191,18 @@ class MyFilesPage(Page):
             
             self.master.con.sendall(dir_message.construct_message_json().encode())
 
-            contents = MessageBasis.parse_from_json(self.master.con.recv(1024).strip(b'\x00').decode("utf-8"))
-            size = contents.size()
-            dir_rsp = MessageBasis.parse_from_json(self.master.con.recv(size).decode("utf-8"))
-
-            if dir_rsp is not None and isinstance(dir_rsp, DirMessage):
-                if dir_rsp.code() == 200:
-                    self.file_list.delete(0, tk.END)
-                    self.display_files(dir_rsp.root())
-                else:
-                    print(f"Failed to get directory structure because: {dir_rsp.message()}")
+            dir_resp = MessageBasis.parse_from_json(self.master.con.recv(1024).strip(b'\x00').decode("utf-8"))
+            code, message, curr, size = dir_resp.code(), dir_resp.message(), dir_resp.curr_dir(), dir_resp.size()
+            
+            self.master.con.sendall(AckMessage(200, "OK").construct_message_json().encode())
+            
+            if code == 200:
+                self.file_list.delete(0, tk.END)
+                dir_struct = receive_network_file_binary(self.master.con, size).decode("utf-8")
+                dir_struct = DirectoryInfo.from_dict(dict(json.loads(dir_struct)))
+                self.display_files(dir_struct)
             else:
-                print("Empty Directory!")
+                print(f"Failed to get directory structure because: {message}")  
         except Exception as e:
             print(f"Error: {e}")
 
@@ -226,10 +226,10 @@ class MyFilesPage(Page):
             return
         
         file_name = os.path.basename(file_path)
-        file_size = os.path.getsize(file_path)
+        file_contents = read_file_for_network(Path(file_path))
         file_kind = get_file_type(Path(file_name))
 
-        upload_message = UploadMessage(file_name, file_kind, file_size)
+        upload_message = UploadMessage(Path(file_path), file_kind, len(file_contents))
 
         try:
             self.master.con.sendall(upload_message.construct_message_json().encode())
@@ -245,7 +245,7 @@ class MyFilesPage(Page):
                 return
             
             if ack_message.code() == 200:
-                self.send_file_data(file_path)
+                self.send_file_data(file_contents)
             else:
                 self.show_error(f"Server responded with code {ack_message.code()}: {ack_message.message()}")
         except Exception as e:
@@ -254,15 +254,16 @@ class MyFilesPage(Page):
     def get_file_kind(self, file_name) -> FileType:
         return get_file_type(Path(file_name))
         
-    def send_file_data(self, file_path):
+    def send_file_data(self, file_contents):
         try:
-            with open(file_path, 'rb') as file:
-                while True:
-                    contents = file.read()
-                    print(len(contents))
-                    if not contents:
-                        break
-                    self.master.con.sendall(contents)
+            sent_count = 0
+            for item in file_contents:
+                self.master.con.send(item)
+                sent_count += 1
+                
+            if sent_count != len(file_contents):
+                self.show_error("Failed to send all file contents.")
+                return
             
             final_ack_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
             if not final_ack_resp:
@@ -320,7 +321,7 @@ class ConnectPage(Page):
         self.username = ""
         self.password = ""
         self.server_ip = "127.0.0.1"
-        self.server_port = 61324
+        self.server_port = 8181
         self.load_content()
         self.create_connection()
 
