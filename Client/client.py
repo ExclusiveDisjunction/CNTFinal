@@ -6,7 +6,7 @@ from tkinter import font as tkFont
 from tkinter import messagebox, filedialog
 import hashlib
 from Common.message_handler import *
-from Common.file_io import FileInfo, get_file_type, FileType, read_file_for_network, DirectoryInfo, receive_network_file_binary
+from Common.file_io import FileInfo, get_file_type, FileType, read_file_for_network, DirectoryInfo, receive_network_file_binary, receive_network_file
 
 class FileSharingApp(tk.Tk):
     def __init__(self):
@@ -177,8 +177,14 @@ class MyFilesPage(Page):
         self.file_list = tk.Listbox(self, height=30, width=80)
         self.file_list.pack(pady=10)
 
-        upload_button = tk.Button(self, text="Upload File", command=self.upload_files, font=("Figtree", 14), bg=self.button_color, fg=self.text_color)
-        upload_button.pack(pady=10)
+        button_frame = tk.Frame(self, bg=self.bg_color)
+        button_frame.pack(pady=10)
+
+        upload_button = tk.Button(button_frame, text="Upload File", command=self.upload_files, font=("Figtree", 14), bg=self.button_color, fg=self.text_color)
+        upload_button.pack(side=tk.LEFT, padx=10)
+
+        download_button = tk.Button(button_frame, text="Download File", command=self.download_files, font=("Figtree", 14), bg=self.button_color, fg=self.text_color)
+        download_button.pack(side=tk.RIGHT, padx=10)
 
         self.request_files()
 
@@ -217,7 +223,7 @@ class MyFilesPage(Page):
             elif isinstance(item, DirectoryInfo):
                 self.display_files(item, ts + '\t')
 
-    def upload_files(self,):
+    def upload_files(self):
         threading.Thread(target=self._upload_files).start()
 
     def _upload_files(self):
@@ -229,7 +235,7 @@ class MyFilesPage(Page):
         file_contents = read_file_for_network(Path(file_path))
         file_kind = get_file_type(Path(file_name))
 
-        upload_message = UploadMessage(Path(file_path), file_kind, len(file_contents))
+        upload_message = UploadMessage(Path(file_name), file_kind, len(file_contents))
 
         try:
             self.master.con.sendall(upload_message.construct_message_json().encode())
@@ -247,7 +253,7 @@ class MyFilesPage(Page):
             if ack_message.code() == 200:
                 self.send_file_data(file_contents)
             else:
-                self.show_error(f"Server responded with code {ack_message.code()}: {ack_message.message()}")
+                self.show_error(f"Server responded with code E: {ack_message.code()}: {ack_message.message()}")
         except Exception as e:
             self.show_error(f"Error Test: {e}")
 
@@ -286,6 +292,35 @@ class MyFilesPage(Page):
         except Exception as e:
             self.show_error(f"Error Test2: {e}")  
 
+    def download_files(self):
+        threading.Thread(target=self._download_files).start()
+
+    def _download_files(self):
+        try:
+            selected_file = self.file_list.get(self.file_list.curselection())
+            if selected_file is None or len(selected_file) == 0:
+                return
+            file_name = selected_file.split(" ")[0].strip()
+            self.master.con.sendall(DownloadMessage(file_name).construct_message_json().encode()) 
+
+            download_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
+            download_message = MessageBasis.parse_from_json(download_resp)
+            if download_message is not None and isinstance(download_message, DownloadMessage):
+                self.master.con.sendall(AckMessage(200, "OK").construct_message_json().encode())
+                if download_message.status() == 200:
+                    print("Downloading file...")
+                    size = download_message.size()
+                    save_path = filedialog.asksaveasfilename(defaultextension=".*", initialfile=file_name)
+                    if save_path:
+                        receive_network_file(Path(save_path), self.master.con, size)
+                        print("Download complete.")
+                    else:
+                        print("Download cancelled.")
+                else:
+                    print(f"Failed to download file because: {download_message.message()}")
+        except Exception as e:
+            print(f"Error: {e}")
+            
     def show_error(self, message):
         self.after(0, lambda: messagebox.showerror("Error", message))
 
@@ -321,7 +356,7 @@ class ConnectPage(Page):
         self.username = ""
         self.password = ""
         self.server_ip = "127.0.0.1"
-        self.server_port = 8181
+        self.server_port = 61324
         self.load_content()
         self.create_connection()
 
