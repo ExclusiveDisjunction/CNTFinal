@@ -262,13 +262,11 @@ class MyFilesPage(Page):
                 print("No connection")
                 return
             
-            print(f"Requesting files for current directory")  # Debug log
             self.master.con.sendall(dir_message.construct_message_json().encode())
 
             dir_resp = MessageBasis.parse_from_json(self.master.con.recv(1024).strip(b'\x00').decode("utf-8"))
             code, message, curr, size = dir_resp.code(), dir_resp.message(), dir_resp.curr_dir(), dir_resp.size()
             
-            print(f"Received directory response - curr_dir: {curr}")  # Debug log
             self.current_dir = curr
             
             self.master.con.sendall(AckMessage(200, "OK").construct_message_json().encode())
@@ -281,7 +279,6 @@ class MyFilesPage(Page):
                 # Update path display
                 path_text = f"Path: /{self.current_dir}" if self.current_dir else "Path: /"
                 self.path_label.config(text=path_text)
-                print(f"Updated path display to: {path_text}")  # Debug log
             else:
                 print(f"Failed to get directory structure because: {message}")  
         except Exception as e:
@@ -442,7 +439,6 @@ class MyFilesPage(Page):
 
     def _move_directory(self, move_path):
         try:
-            print(f"Moving to directory: {move_path}")  # Debug log
             # Send move message to server
             self.master.con.sendall(MoveMessage(move_path).construct_message_json().encode())
             
