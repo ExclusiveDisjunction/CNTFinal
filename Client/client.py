@@ -4,6 +4,7 @@ import tkinter as tk
 import socket
 from tkinter import font as tkFont
 from tkinter import messagebox, filedialog
+from tkinter import simpledialog
 from tkmacosx import Button
 import hashlib
 from Common.message_handler import *
@@ -173,7 +174,7 @@ class MyFilesPage(Page):
 
     def create_content(self):
         self.master.create_topbar("My Files")
-        self.file_list = tk.Listbox(self, height=30, width=80)
+        self.file_list = tk.Listbox(self, height=30, width=80, selectforeground=self.text_color, selectbackground=self.button_color, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
         self.file_list.pack(pady=10)
         self.file_list.bind("<<ListboxSelect>>", self.on_file_select)
 
@@ -188,6 +189,9 @@ class MyFilesPage(Page):
 
         self.delete_button = Button(button_frame, text="Delete File", command=self.delete_files, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1, state=tk.DISABLED)
         self.delete_button.pack(side=tk.RIGHT, padx=10)
+
+        self.create_subfolder_button = Button(button_frame, text="Create Subfolder", command=self.create_subfolder, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1)
+        self.create_subfolder_button.pack(side=tk.RIGHT, padx=10)
 
         self.request_files()
 
@@ -319,6 +323,7 @@ class MyFilesPage(Page):
                         print("Download complete.")
                     else:
                         print("Download cancelled.")
+                        self.clear_socket_buffer()
                 else:
                     print(f"Failed to download file because: {download_message.message()}")
         except Exception as e:
@@ -339,20 +344,57 @@ class MyFilesPage(Page):
             delete_message = MessageBasis.parse_from_json(delete_resp)
             if delete_message is not None and isinstance(delete_message, AckMessage):
                 if delete_message.code() == 200:
-                    print("File deleted successfully.")
+                    self.after(0, lambda: messagebox.showinfo("Success", "File deleted successfully."))
                     self.after(0, self.request_files)
                 else:
-                    print(f"Failed to delete file because: {delete_message.message()}")
+                    self.after(0, lambda: messagebox.showinfo("Failure", f"Failed to delete file because: {delete_message.message()}"))
+            self.after(0, self.update_button_states)
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def create_subfolder(self):
+        folder_name = simpledialog.askstring("Create Subfolder", "Enter the name of the subfolder:")
+        if folder_name is not None or len(folder_name.strip()) > 0:
+            threading.Thread(target=self._create_subfolder(folder_name)).start()
+
+    def _create_subfolder(self, folder_name):
+        try:
+            self.master.con.sendall(SubfolderMessage(folder_name, SubfolderAction.Add).construct_message_json().encode())
+            subfolder_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
+            subfolder_message = MessageBasis.parse_from_json(subfolder_resp)
+            if subfolder_message is not None and isinstance(subfolder_message, AckMessage):
+                if subfolder_message.code() == 200:
+                    self.after(0, lambda: messagebox.showinfo("Success", "Subfolder created successfully."))
+                    self.after(0, self.request_files)
+                else:
+                    self.after(0, lambda: messagebox.showinfo("Failure", f"Failed to create subfolder because: {subfolder_message.message()}"))
+            self.after(0, self.update_button_states)
         except Exception as e:
             print(f"Error: {e}")
     
-    def on_file_select(self, event):
-        if len(self.file_list.curselection()) == 0:
-            self.download_button.config(state=tk.DISABLED)
-            self.delete_button.config(state=tk.DISABLED)
-        else:
+    def update_button_states(self):
+        selected_indices = self.file_list.curselection()
+        if selected_indices:
             self.download_button.config(state=tk.NORMAL)
             self.delete_button.config(state=tk.NORMAL)
+        else:
+            self.download_button.config(state=tk.DISABLED)
+            self.delete_button.config(state=tk.DISABLED)
+
+    def on_file_select(self, event):
+        self.update_button_states()
+
+    def clear_socket_buffer(self):
+        try:
+            self.master.con.settimeout(0.1)
+            while True:
+                data = self.master.con.recv(1024)
+                if not data:
+                    break
+        except Exception as e:
+            pass
+        finally:
+            self.master.con.settimeout(None)
             
     def show_error(self, message):
         self.after(0, lambda: messagebox.showerror("Error", message))
@@ -380,10 +422,9 @@ class ConnectPage(Page):
         super().__init__(parent, bg_color, text_color, button_color)
         self.username = ""
         self.password = ""
-        self.server_ip = "127.0.0.1"
-        self.server_port = 61324
+        self.ip = "127.0.0.1"
+        self.port = 61324
         self.load_content()
-        self.create_connection()
 
     def hash_password(self, plain_password):
         hashed_password = hashlib.sha256(plain_password.encode()).hexdigest()
@@ -395,11 +436,10 @@ class ConnectPage(Page):
     def _validate_login(self):
         self.username = self.username_entry.get()
         self.password = self.password_entry.get()
+        self.create_connection()
         hashed_password = self.hash_password(self.password)
 
         connect_message = ConnectMessage(username=self.username, passwordHash=hashed_password)
-        temp_thing = connect_message.construct_message_json()
-        decoded = MessageBasis.parse_from_json(temp_thing)
         try:
             self.con.sendall(connect_message.construct_message_json().encode())
 
@@ -419,7 +459,7 @@ class ConnectPage(Page):
             message = MessageBasis.parse_from_json(contents.decode("utf-8"))
             if not isinstance(message, AckMessage):
                 messagebox.showerror("Error", f"Unexpected message of type {message.message_type()}")
-                print(f"Unexpected message of type {message.message_type()}sß")
+                print(f"Unexpected message of type {message.message_type()}")
                 self.con.close()
             
             MessageBasis.parse_from_json(contents.decode("utf-8"))
@@ -432,10 +472,24 @@ class ConnectPage(Page):
         except Exception as e:
             messagebox.showerror("Error", f"Error: {e}")
 
+    def save_connection_details(self):
+        try:
+            ip = self.ip_address_entry.get()
+            port = self.port_entry.get()
+
+            if ip:
+                self.ip = ip
+            if port:
+                self.port = int(port)
+            
+            messagebox.showinfo("Info", "Connection details saved.")
+        except ValueError:
+            messagebox.showerror("Error", "Invalid port number.")
+
     def create_connection(self):
         try:
             self.con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.con.connect((self.server_ip, self.server_port))
+            self.con.connect((self.ip, self.port))
             self.master.con = self.con
             self.master.status_update("Online")
         except Exception as e:
@@ -445,23 +499,51 @@ class ConnectPage(Page):
             self.master.status_update("Offline")
 
     def load_content(self):
-
         self.reset_content()
 
-        label = tk.Label(self, text="Please Login:", font=("Figtree", 24), fg=self.text_color, bg=self.bg_color)
-        label.pack(pady=20)
+        user_pass_frame = tk.Frame(self, bg=self.bg_color)
+        user_pass_frame.pack(pady=10)
 
-        self.username_label = tk.Label(self, text="Username:", font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
-        self.username_label.pack(pady=10)
+        label = tk.Label(user_pass_frame, text="Please Login:", font=("Figtree", 24), fg=self.text_color, bg=self.bg_color)
+        label.grid(row=0, column=0, columnspan=2, pady=20)
 
-        self.username_entry = tk.Entry(self, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
-        self.username_entry.pack(pady=10)
+        self.username_label = tk.Label(user_pass_frame, text="Username:", font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
+        self.username_label.grid(row=1, column=0, pady=10, sticky="w")
 
-        self.password_label = tk.Label(self, text="Password:", font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
-        self.password_label.pack(pady=10)
+        self.username_entry = tk.Entry(user_pass_frame, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
+        self.username_entry.grid(row=2, column=0, pady=10, padx=10, sticky="ew")
 
-        self.password_entry = tk.Entry(self, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color, show="*")
-        self.password_entry.pack(pady=10)
+        self.password_label = tk.Label(user_pass_frame, text="Password:", font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
+        self.password_label.grid(row=3, column=0, pady=10, sticky="w")
 
-        self.login_button = Button(self, text="Login", font=("Figtree", 14), bg=self.button_color, fg=self.text_color, command=self.validate_login)
-        self.login_button.pack(pady=10)
+        self.password_entry = tk.Entry(user_pass_frame, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color, show="*")
+        self.password_entry.grid(row=4, column=0, pady=10, padx=10, sticky="ew")
+
+        ip_port_frame = tk.Frame(self, bg=self.bg_color)
+        ip_port_frame.pack(pady=10)
+
+        self.ip_address_label = tk.Label(ip_port_frame, text="Ip-Address:", font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
+        self.ip_address_label.grid(row=0, column=0, pady=10, sticky="w")
+
+        self.ip_address_entry = tk.Entry(ip_port_frame, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
+        self.ip_address_entry.grid(row=1, column=0, pady=10, padx=10, sticky="ew")
+
+        self.port_label = tk.Label(ip_port_frame, text="Port:", font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
+        self.port_label.grid(row=0, column=1, pady=10, sticky="w")
+        
+        self.port_entry = tk.Entry(ip_port_frame, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
+        self.port_entry.grid(row=1, column=1, pady=10, padx=10, sticky="ew")
+
+        button_frame = tk.Frame(self, bg=self.bg_color)
+        button_frame.pack(pady=10)
+
+        self.login_button = Button(button_frame, text="Login", font=("Figtree", 14), bg=self.button_color, fg=self.text_color, command=self.validate_login, borderless=1)
+        self.login_button.pack(side=tk.LEFT, pady=10)
+
+        self.save_button = Button(button_frame, text="Save", font=("Figtree", 14), bg=self.button_color, fg=self.text_color, command=self.save_connection_details, borderless=1)
+        self.save_button.pack(side=tk.RIGHT, pady=10)
+
+        # Configure grid columns to expand
+        user_pass_frame.grid_columnconfigure(0, weight=1)
+        ip_port_frame.grid_columnconfigure(0, weight=1)
+        ip_port_frame.grid_columnconfigure(1, weight=1)
