@@ -609,7 +609,6 @@ class SettingsPage(Page):
         print(f"Setting saved: {setting}")
 
 class ConnectPage(Page):
-
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
         self.username = ""
