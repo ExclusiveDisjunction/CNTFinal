@@ -27,10 +27,16 @@ class NetworkAnalyzer:
         try:
             with open(self.stats_file, 'r') as f:
                 contents = f.read()
-                if contents is None or len(contents) == 0:
-                    contents = "{}"
+                if contents is None or len(contents.strip()) == 0:
+                    self.stats = {"transfers": []}
+                    return
 
                 data = json.loads(contents)
+
+                # Handle the case where data does not have transfer key
+                if "transfers" not in data:
+                    data["transfers"] = []
+
                 # Convert dictionary data back to TransferStats objects
                 self.stats["transfers"] = [
                     TransferStats(**transfer) for transfer in data["transfers"]
