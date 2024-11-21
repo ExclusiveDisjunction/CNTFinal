@@ -232,8 +232,11 @@ class MyFilesPage(Page):
         self.delete_button = Button(button_frame, text="Delete File", command=self.delete_files, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1, state=tk.DISABLED)
         self.delete_button.pack(side=tk.RIGHT, padx=10)
 
-        self.create_subfolder_button = Button(button_frame, text="Create Subfolder", command=self.create_subfolder, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1)
+        self.create_subfolder_button = Button(nav_frame, text="Create Subfolder", command=self.create_subfolder, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1)
         self.create_subfolder_button.pack(side=tk.RIGHT, padx=10)
+        
+        self.delete_subfolder_button = Button(nav_frame, text="Delete Subfolder", command=self.delete_subfolder, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1)
+        self.delete_subfolder_button.pack(side=tk.RIGHT, padx=10)
 
         self.request_files()
     
@@ -433,7 +436,29 @@ class MyFilesPage(Page):
             self.after(0, self.update_button_states)
         except Exception as e:
             print(f"Error: {e}")
-
+            
+    def delete_subfolder(self):
+        selected_dir = self.file_list.get(self.file_list.curselection())
+        selected_dir = selected_dir.split(" ")[0].strip()
+        
+        if selected_dir is not None or len(selected_dir) > 0:
+            threading.Thread(target=self._delete_subfolder(selected_dir)).start()
+    
+    def _delete_subfolder(self, selected_dir):
+        try:
+            self.master.con.sendall(SubfolderMessage(selected_dir, SubfolderAction.Delete).construct_message_json().encode())
+            subfolder_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
+            subfolder_message = MessageBasis.parse_from_json(subfolder_resp)
+            if subfolder_message is not None and isinstance(subfolder_message, AckMessage):
+                if subfolder_message.code() == 200:
+                    self.after(0, lambda: messagebox.showinfo("Success", "Subfolder deleted successfully."))
+                    self.after(0, self.request_files)
+                else:
+                    self.after(0, lambda: messagebox.showinfo("Failure", f"Failed to delete subfolder because: {subfolder_message.message()}"))
+            self.after(0, self.update_button_states)
+        except Exception as e:
+            print(f"Error: {e}")
+                
     def move_directory(self, move_path):
         threading.Thread(target=self._move_directory, args=(move_path,)).start()
 
@@ -584,7 +609,6 @@ class SettingsPage(Page):
         print(f"Setting saved: {setting}")
 
 class ConnectPage(Page):
-
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
         self.username = ""
