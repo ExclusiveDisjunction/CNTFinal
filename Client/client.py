@@ -520,7 +520,58 @@ class PerformancePage(Page):
         super().__init__(parent, bg_color, text_color, button_color)
 
     def create_content(self):
-       raise NotImplementedError("Subclasses should implement this method.")
+        self.master.create_topbar("Performance")
+
+        self.performance_label = tk.Label(
+            self,
+            text="Performance Metrics",
+            font=("Figtree", 24),
+            fg=self.text_color,
+            bg=self.bg_color
+        )
+        self.performance_label.pack(pady=10)
+
+        self.performance_text = tk.Text(
+            self,
+            height=20,
+            width=80,
+            font=("Figtree", 12),
+            fg=self.text_color,
+            bg=self.bg_color
+        )
+        self.performance_text.pack(pady=10)
+
+        self.get_stats()
+
+        # self.refresh_button = Button(
+        #     self,
+        #     text="Refresh",
+        #     command=self.refresh_performance,
+        #     font=("Figtree", 14),
+        #     bg=self.button_color,
+        #     fg=self.text_color,
+        #     borderless=1
+        # )
+        # self.refresh_button.pack(pady=10)
+    def get_stats(self):
+        try:
+            
+            self.master.con.sendall(StatsMessage().construct_message_json().encode())
+            print("HERE")
+            stats_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
+            stats_message = MessageBasis.parse_from_json(stats_resp)
+            print("HERE2")
+            if stats_message is not None and isinstance(stats_message, StatsMessage):
+                print(stats_message.data)
+                self.performance_text.delete(1.0, tk.END)
+                self.performance_text.insert(tk.END, stats_message)
+            else:
+                self.show_error(f"Failed to get performance stats: {stats_message.message()}")
+        except Exception as e:
+            self.show_error(f"Error: {e}")
+
+    def show_error(self, message):
+        self.after(0, lambda: messagebox.showerror("Error", message))
 
 class SettingsPage(Page):
     def __init__(self, parent, bg_color, text_color, button_color):
