@@ -243,7 +243,8 @@ def connection_proc(conn: ConnectionCore) -> None:
                     if conn.cred() is None:
                         responses.append(DirMessage(401, "Not signed in", None, None))
                     else:
-                        dir_structure = create_directory_info()
+                        # Use current path for directory listing
+                        dir_structure = create_directory_info(conn.path())
                         dir_contents = json.dumps(dir_structure.to_dict()).encode()
                         network_dir = split_binary_for_network(dir_contents)
 

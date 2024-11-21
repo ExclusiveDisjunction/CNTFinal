@@ -99,7 +99,7 @@ class FileInfo:
         if self.__parent is None:
             return None
         
-        return self.__parent.targt_path_relative().joinpath(self.__name)
+        return self.__parent.target_path_relative().joinpath(self.__name)
     
     def target_path_absolute(self, env_path: Path) -> str:
         """
