@@ -232,8 +232,11 @@ class MyFilesPage(Page):
         self.delete_button = Button(button_frame, text="Delete File", command=self.delete_files, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1, state=tk.DISABLED)
         self.delete_button.pack(side=tk.RIGHT, padx=10)
 
-        self.create_subfolder_button = Button(button_frame, text="Create Subfolder", command=self.create_subfolder, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1)
+        self.create_subfolder_button = Button(nav_frame, text="Create Subfolder", command=self.create_subfolder, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1)
         self.create_subfolder_button.pack(side=tk.RIGHT, padx=10)
+        
+        self.delete_subfolder_button = Button(nav_frame, text="Delete Subfolder", command=self.delete_subfolder, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, borderless=1)
+        self.delete_subfolder_button.pack(side=tk.RIGHT, padx=10)
 
         self.request_files()
     
@@ -433,7 +436,29 @@ class MyFilesPage(Page):
             self.after(0, self.update_button_states)
         except Exception as e:
             print(f"Error: {e}")
-
+            
+    def delete_subfolder(self):
+        selected_dir = self.file_list.get(self.file_list.curselection())
+        selected_dir = selected_dir.split(" ")[0].strip()
+        
+        if selected_dir is not None or len(selected_dir) > 0:
+            threading.Thread(target=self._delete_subfolder(selected_dir)).start()
+    
+    def _delete_subfolder(self, selected_dir):
+        try:
+            self.master.con.sendall(SubfolderMessage(selected_dir, SubfolderAction.Delete).construct_message_json().encode())
+            subfolder_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
+            subfolder_message = MessageBasis.parse_from_json(subfolder_resp)
+            if subfolder_message is not None and isinstance(subfolder_message, AckMessage):
+                if subfolder_message.code() == 200:
+                    self.after(0, lambda: messagebox.showinfo("Success", "Subfolder deleted successfully."))
+                    self.after(0, self.request_files)
+                else:
+                    self.after(0, lambda: messagebox.showinfo("Failure", f"Failed to delete subfolder because: {subfolder_message.message()}"))
+            self.after(0, self.update_button_states)
+        except Exception as e:
+            print(f"Error: {e}")
+                
     def move_directory(self, move_path):
         threading.Thread(target=self._move_directory, args=(move_path,)).start()
 
@@ -520,7 +545,58 @@ class PerformancePage(Page):
         super().__init__(parent, bg_color, text_color, button_color)
 
     def create_content(self):
-       raise NotImplementedError("Subclasses should implement this method.")
+        self.master.create_topbar("Performance")
+
+        self.performance_label = tk.Label(
+            self,
+            text="Performance Metrics",
+            font=("Figtree", 24),
+            fg=self.text_color,
+            bg=self.bg_color
+        )
+        self.performance_label.pack(pady=10)
+
+        self.performance_text = tk.Text(
+            self,
+            height=20,
+            width=80,
+            font=("Figtree", 12),
+            fg=self.text_color,
+            bg=self.bg_color
+        )
+        self.performance_text.pack(pady=10)
+
+        self.get_stats()
+
+        # self.refresh_button = Button(
+        #     self,
+        #     text="Refresh",
+        #     command=self.refresh_performance,
+        #     font=("Figtree", 14),
+        #     bg=self.button_color,
+        #     fg=self.text_color,
+        #     borderless=1
+        # )
+        # self.refresh_button.pack(pady=10)
+    def get_stats(self):
+        try:
+            
+            self.master.con.sendall(StatsMessage().construct_message_json().encode())
+            print("HERE")
+            stats_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
+            stats_message = MessageBasis.parse_from_json(stats_resp)
+            print("HERE2")
+            if stats_message is not None and isinstance(stats_message, StatsMessage):
+                print(stats_message.data)
+                self.performance_text.delete(1.0, tk.END)
+                self.performance_text.insert(tk.END, stats_message)
+            else:
+                self.show_error(f"Failed to get performance stats: {stats_message.message()}")
+        except Exception as e:
+            self.show_error(f"Error: {e}")
+
+    def show_error(self, message):
+        self.after(0, lambda: messagebox.showerror("Error", message))
 
 class SettingsPage(Page):
     def __init__(self, parent, bg_color, text_color, button_color):
@@ -533,7 +609,6 @@ class SettingsPage(Page):
         print(f"Setting saved: {setting}")
 
 class ConnectPage(Page):
-
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
         self.username = ""

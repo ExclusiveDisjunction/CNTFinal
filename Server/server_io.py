@@ -109,5 +109,13 @@ def ModifySubdirectories(path: Path, action: SubfolderAction) -> None | HTTPErro
         case SubfolderAction.Delete:
             if not path.exists():
                 return ConflictError("Path does not exist, but attempted to delete")
-            
-            os.remove(path)
+
+            try:
+                if len(os.listdir(path)) > 0:
+                    return ConflictError("Directory is not empty")
+                os.rmdir(path)
+            except PermissionError:
+                return ConflictError("Permission denied")
+            except OSError as e:
+                return ConflictError(str(e))                
+                
