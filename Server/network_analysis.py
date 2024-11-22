@@ -8,88 +8,64 @@ class TransferStats:
     transfer_time: float
     data_rate: float
     latency: float
-    transfer_type: str # 'upload' or 'download'
+    ip: str
 
 class NetworkAnalyzer:
     def __init__(self):
         self.stats_file = None
-        self.stats = None
+        self.stats: list[TransferStats] = None
 
     def open(self, path: Path):
         self.stats_file = path
-        self.stats = { 
-            "transfers": []
-        }
-        self._load_stats()
-
-    # Loads existing statistics from file if it exists
-    def _load_stats(self):
+        
         try:
             with open(self.stats_file, 'r') as f:
                 contents = f.read()
-                if contents is None or len(contents.strip()) == 0:
-                    self.stats = {"transfers": []}
-                    return
+                if contents is None or len(contents) == 0:
+                    contents = "[]"
 
                 data = json.loads(contents)
-
-                # Handle the case where data does not have transfer key
-                if "transfers" not in data:
-                    data["transfers"] = []
-
-                # Convert dictionary data back to TransferStats objects
-                self.stats["transfers"] = [
-                    TransferStats(**transfer) for transfer in data["transfers"]
-                ]
+                self.stats["transfers"] = data
         except (FileNotFoundError, json.JSONDecodeError):
-            self.stats = {"transfers": []}
+            self.stats = []
 
     # Saves statistics to file
     def save(self):
         with open(self.stats_file, 'w') as f:
             # Convert TransferStats objects to dictionaries
-            data = {
-                "transfers": [
-                    {
-                        "file_size": stat.file_size,
-                        "transfer_time": stat.transfer_time,
-                        "data_rate": stat.data_rate,
-                        "latency": stat.latency,
-                        "transfer_type": stat.transfer_type,
-                    }
-                    for stat in self.stats["transfers"]
-                ]
-            }
-            json.dump(data, f, indent=2)
+            data =  [
+                        {
+                            "file_size": stat.file_size,
+                            "transfer_time": stat.transfer_time,
+                            "data_rate": stat.data_rate,
+                            "latency": stat.latency,
+                            "up": stat.ip,
+                        }
+                        for stat in self.stats
+                    ]
+            json.dump(data, f)
 
     # Records statistics for a file transfer
-    def record_transfer(self, file_size: int, start_time: float, end_time: float, 
-                       latency: float, transfer_type: str):
-        transfer_time = end_time - start_time
-        data_rate = self._calculate_data_rate(file_size, transfer_time)
-        
+    def record_transfer(self, file_size: int, start_time: float, end_time: float, latency: float, ip: str) -> None:
+        time = end_time - start_time
+        rate = NetworkAnalyzer._calculate_data_rate(file_size, time)
+        latency = 1 / time
+
         stat = TransferStats(
-            file_size=file_size,
-            transfer_time=transfer_time,
-            data_rate=data_rate,
-            latency=latency,
-            transfer_type=transfer_type,
+            file_size = file_size,
+            transfer_time = time,
+            data_rate = rate,
+            latency = latency,
+            ip = ip
         )
-        
-        self.stats["transfers"].append(stat)
-        return stat.__dict__
-    
-    def get_last_transfer(self) -> TransferStats | None:
-        """
-        Gets the last transfer statistics out of the current instance
-        """
-        if len(self.stats["transfers"]):
-            return None
-        else:
-            return self.stats["transfers"][-1]
+
+        self.stats.append(stat)
+
+    def get_ip_stats(self, ip: str) -> list[TransferStats]:
+        return list(filter(lambda x: x.ip == ip, self.stats))
 
     # Calculates data rate in MB/s
-    def _calculate_data_rate(self, file_size: int, transfer_time: float) -> float:
+    def _calculate_data_rate(file_size: int, transfer_time: float) -> float:
         if transfer_time > 0:
             return (file_size / transfer_time) / 1e6  # Convert to MB/s
         return 0.0
