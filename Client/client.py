@@ -386,6 +386,7 @@ class MyFilesPage(Page):
                     if save_path:
                         receive_network_file(Path(save_path), self.master.con, size)
                         print("Download complete.")
+                        self.master.con.sendall(AckMessage(200, "OK").construct_message_json().encode())
                     else:
                         print("Download cancelled.")
                         self.clear_socket_buffer()
@@ -598,21 +599,14 @@ class PerformancePage(Page):
 
         self.get_stats()
 
-        # self.refresh_button = Button(
-        #     self,
-        #     text="Refresh",
-        #     command=self.refresh_performance,
-        #     font=("Figtree", 14),
-        #     bg=self.button_color,
-        #     fg=self.text_color,
-        #     borderless=1
-        # )
-        # self.refresh_button.pack(pady=10)
-
     def update_labels(self):
-        self.data_rate_label.config(text=f"Data Rate (MB/s): {self.data_rate}")
-        self.file_transfer_label.config(text=f"File Transfer Time (ms): {self.file_transfer_time}")
-        self.latency_label.config(text=f"Latency (ms): {self.latency}")
+        data_rate_rounded = round(self.data_rate, 2) if self.data_rate is not None else 0
+        file_transfer_rounded = round(self.file_transfer_time, 2) if self.file_transfer_time is not None else 0
+        latency_rounded = round(self.latency, 2) if self.latency is not None else 0
+
+        self.data_rate_label.config(text=f"Data Rate (MB/s): {data_rate_rounded}")
+        self.file_transfer_label.config(text=f"File Transfer Time (ms): {file_transfer_rounded}")
+        self.latency_label.config(text=f"Latency (ms): {latency_rounded}")
 
     def get_stats(self):
         try:
