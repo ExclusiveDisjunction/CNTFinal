@@ -78,6 +78,15 @@ class NetworkAnalyzer:
         
         self.stats["transfers"].append(stat)
         return stat.__dict__
+    
+    def get_last_transfer(self) -> TransferStats | None:
+        """
+        Gets the last transfer statistics out of the current instance
+        """
+        if len(self.stats["transfers"]):
+            return None
+        else:
+            return self.stats["transfers"][-1]
 
     # Calculates data rate in MB/s
     def _calculate_data_rate(self, file_size: int, transfer_time: float) -> float:
