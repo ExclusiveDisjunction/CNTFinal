@@ -25,7 +25,7 @@ class NetworkAnalyzer:
                     contents = "[]"
 
                 data = json.loads(contents)
-                self.stats["transfers"] = data
+                self.stats = data
         except (FileNotFoundError, json.JSONDecodeError):
             self.stats = []
 
