@@ -130,6 +130,11 @@ def client_test_server() -> bool:
             else:
                 print(f"Could not add subdirectory because of '{ack.message()}'")
         """
+
+        send_message(s, StatsMessage())
+        recv_stats = get_message(s)
+        if recv_stats is not None and isinstance(recv_stats, StatsMessage):
+            print("got stats")
         
         
         print("Closing connection")
