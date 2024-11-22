@@ -587,14 +587,14 @@ class PerformancePage(Page):
         )
         self.file_transfer_label.pack(pady=10)
         
-        self.latency = tk.Label(
+        self.latency_label = tk.Label(
             self,
             text=f"Latency (ms): {self.latency}",
             font=("Figtree", 14),
             fg=self.text_color,
             bg=self.bg_color
         )
-        self.latency.pack(pady=10)
+        self.latency_label.pack(pady=10)
 
         self.get_stats()
 
@@ -608,6 +608,12 @@ class PerformancePage(Page):
         #     borderless=1
         # )
         # self.refresh_button.pack(pady=10)
+
+    def update_labels(self):
+        self.data_rate_label.config(text=f"Data Rate (MB/s): {self.data_rate}")
+        self.file_transfer_label.config(text=f"File Transfer Time (ms): {self.file_transfer_time}")
+        self.latency_label.config(text=f"Latency (ms): {self.latency}")
+
     def get_stats(self):
         try:
             
@@ -618,10 +624,14 @@ class PerformancePage(Page):
                 self.data_rate = stats_message.data_rates()
                 self.file_transfer_time = stats_message.file_transfer_time()
                 self.latency = stats_message.latency()
+                self.update_labels()
             else:
                 self.show_error(f"Failed to get performance stats: {stats_message.message()}")
         except Exception as e:
             self.show_error(f"Error: {e}")
+
+    def refresh_stats(self):
+        self.get_stats()
 
     def show_error(self, message):
         self.after(0, lambda: messagebox.showerror("Error", message))
