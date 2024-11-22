@@ -543,6 +543,9 @@ class MyFilesPage(Page):
 class PerformancePage(Page):
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
+        self.data_rate = None
+        self.file_transfer_time = None
+        self.latency = None
 
     def create_content(self):
         self.master.create_topbar("Performance")
@@ -556,15 +559,42 @@ class PerformancePage(Page):
         )
         self.performance_label.pack(pady=10)
 
-        self.performance_text = tk.Text(
+        # self.performance_text = tk.Text(
+        #     self,
+        #     height=20,
+        #     width=80,
+        #     font=("Figtree", 12),
+        #     fg=self.text_color,
+        #     bg=self.bg_color
+        # )
+        # self.performance_text.pack(pady=10)
+        
+        self.data_rate_label = tk.Label(
             self,
-            height=20,
-            width=80,
-            font=("Figtree", 12),
+            text=f"Data Rate (MB/s): {self.data_rate}",
+            font=("Figtree", 14),
             fg=self.text_color,
             bg=self.bg_color
         )
-        self.performance_text.pack(pady=10)
+        self.data_rate_label.pack(pady=10)
+        
+        self.file_transfer_label = tk.Label(
+            self,
+            text=f"File Transfer Time (ms): {self.file_transfer_time}",
+            font=("Figtree", 14),
+            fg=self.text_color,
+            bg=self.bg_color
+        )
+        self.file_transfer_label.pack(pady=10)
+        
+        self.latency = tk.Label(
+            self,
+            text=f"Latency (ms): {self.latency}",
+            font=("Figtree", 14),
+            fg=self.text_color,
+            bg=self.bg_color
+        )
+        self.latency.pack(pady=10)
 
         self.get_stats()
 
@@ -582,14 +612,12 @@ class PerformancePage(Page):
         try:
             
             self.master.con.sendall(StatsMessage().construct_message_json().encode())
-            print("HERE")
             stats_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
             stats_message = MessageBasis.parse_from_json(stats_resp)
-            print("HERE2")
             if stats_message is not None and isinstance(stats_message, StatsMessage):
-                print(stats_message.data)
-                self.performance_text.delete(1.0, tk.END)
-                self.performance_text.insert(tk.END, stats_message)
+                self.data_rate = stats_message.data_rates()
+                self.file_transfer_time = stats_message.file_transfer_time()
+                self.latency = stats_message.latency()
             else:
                 self.show_error(f"Failed to get performance stats: {stats_message.message()}")
         except Exception as e:
