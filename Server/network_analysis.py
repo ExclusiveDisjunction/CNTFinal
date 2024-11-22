@@ -46,7 +46,7 @@ class NetworkAnalyzer:
             json.dump(data, f)
 
     # Records statistics for a file transfer
-    def record_transfer(self, file_size: int, start_time: float, end_time: float, latency: float, ip: str) -> None:
+    def record_transfer(self, file_size: int, start_time: float, end_time: float, ip: str) -> None:
         time = end_time - start_time
         rate = NetworkAnalyzer._calculate_data_rate(file_size, time)
         latency = 1 / time
@@ -63,6 +63,12 @@ class NetworkAnalyzer:
 
     def get_ip_stats(self, ip: str) -> list[TransferStats]:
         return list(filter(lambda x: x.ip == ip, self.stats))
+    def get_last_ip_stats(self, ip: str) -> TransferStats | None:
+        list = self.get_ip_stats(ip)
+        if len(list) == 0:
+            return None
+        else:
+            return list[-1]
 
     # Calculates data rate in MB/s
     def _calculate_data_rate(file_size: int, transfer_time: float) -> float:
