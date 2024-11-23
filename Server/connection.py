@@ -1,11 +1,13 @@
 import threading
 from socket import socket as soc
+import time
 
 from .credentials import *
 from .io_tools import root_directory, move_relative, create_directory_info, make_relative, get_file_type
+from .network_analysis import network_analyzer
 from .server_io import *
 from Common.message_handler import *
-from Common.file_io import receive_network_file, read_file_for_network, split_binary_for_network
+from Common.file_io import split_binary_for_network
 
 class ConnectionCore:
     def __init__(self, conn: soc, addr, path: Path):
@@ -117,6 +119,7 @@ def send_message(connection: soc, message: MessageBasis, response: bool = True):
 
 def connection_proc(conn: ConnectionCore) -> None:
     global user_database
+    global network_analyzer
 
     addr_str = conn.addr()[0]
     print(f"[{addr_str}] Started connection proc")
@@ -193,6 +196,8 @@ def connection_proc(conn: ConnectionCore) -> None:
                         responses.append(upload_handle.to_ack())
                         upload_handle = None
                     else:
+                        start_time = time.perf_counter()
+
                         send_message(conn.conn(), AckMessage(200, "OK"))
 
                         # Now we get our file
@@ -200,6 +205,9 @@ def connection_proc(conn: ConnectionCore) -> None:
                             responses.append(AckMessage(200, "OK"))
                         else:
                             responses.append(AckMessage(HttpCodes.Conflict, "File upload failed"))
+
+                        end_time = time.perf_counter()
+                        network_analyzer.record_transfer(size * 4096, start_time, end_time, addr_str)
 
                 case MessageType.Download:
                     path = message.path()
@@ -213,19 +221,34 @@ def connection_proc(conn: ConnectionCore) -> None:
                         kind = get_file_type(path)
                         size = len(file_contents)
 
+                        start_time = time.perf_counter()
+
                         send_message(conn.conn(), DownloadMessage(HttpCodes.Ok, "OK", kind, size))
                         
                         try:
                             ack = recv_message(conn.conn(), buff_size)
                             if ack is None or not isinstance(ack, AckMessage):
-                                raise ValueError("Could not parse ack")
+                                print(f"[{addr_str}] Message recieved, expected ack, but got {ack.message_type().value if ack is not None else None}")
                             
                             if ack.code() == 200:
                                 for item in file_contents:
                                     conn.conn().sendall(item)
-
                             else:
-                                print(f'[{addr_str}] Upload failed because of {ack.message()}')
+                                print(f'[{addr_str}] Could not download because of {ack.message()}')
+
+                            ack = recv_message(conn.conn(), buff_size)
+                            if ack is None or not isinstance(ack, AckMessage):
+                                print(f"[{addr_str}] Message recieved, expected ack, but got {ack.message_type().value if ack is not None else None}")
+
+                            
+                            if ack.code() == 200:
+                                print(f'[{addr_str}] Download completed')
+                            else:
+                                print(f'[{addr_str}] Could not download because of {ack.message()}. Stats are still recorded')
+
+                            end_time = time.perf_counter()
+                            network_analyzer.record_transfer(size * 4096, start_time, end_time, addr_str)
+                            
                         except Exception as e:
                             responses.append(AckMessage(HttpCodes.Conflict, str(e)))
 
@@ -282,9 +305,11 @@ def connection_proc(conn: ConnectionCore) -> None:
                     else:
                         responses.append(result.to_ack())
                 case MessageType.Stats:
-                    # Get stats
-                    responses.append(StatsMessage(0, 0, 0))
-
+                    last = network_analyzer.get_last_ip_stats(addr_str)
+                    responses.append(
+                        StatsMessage(last.data_rate, last.transfer_time, last.latency) if last is not None else StatsMessage(0, 0, 0)
+                    )
+                    
             print(f"[{addr_str}] Response contains {len(responses)} message(s)")
             if responses is not None and len(responses) != 0:
                 for response in responses:

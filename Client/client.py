@@ -5,6 +5,7 @@ import socket
 from tkinter import font as tkFont
 from tkinter import messagebox, filedialog
 from tkinter import simpledialog
+from tkinter import colorchooser
 from tkmacosx import Button
 import hashlib
 from Common.message_handler import *
@@ -33,6 +34,14 @@ class FileSharingApp(tk.Tk):
         self.text_color = "white"
         self.online_color = "lime"
         self.offline_color = "red"
+        
+        self.theme = {
+            "bg_color": "#2C2C2C",
+            "text_color": "white",
+            "button_color": "#BB86FC",
+            "sidebar_color": "#3D3D3D",
+            "topbar_color": "#545454"
+        }
 
         # initialize UI elements
         self.current_page = None
@@ -42,6 +51,36 @@ class FileSharingApp(tk.Tk):
         self.create_sidebar()
         self.create_pages()
         self.show_page("Connect")
+        
+    def update_theme(self, bg_color, text_color, button_color):
+        self.theme.update({
+            "bg_color": bg_color,
+            "text_color": text_color,
+            "button_color": button_color
+        })
+        self.apply_theme()
+        
+    def apply_theme(self):
+        # Update main window
+        self.configure(bg=self.theme["bg_color"])
+        
+        # Update sidebar
+        if hasattr(self, 'sidebar'):
+            self.sidebar.configure(bg=self.theme["sidebar_color"])
+            self.status_label.configure(bg=self.theme["sidebar_color"], fg=self.theme["text_color"])
+            
+        # Update topbar
+        if hasattr(self, 'topbar'):
+            self.topbar.configure(bg=self.theme["topbar_color"])
+            self.title_label.configure(bg=self.theme["topbar_color"], fg=self.theme["text_color"])
+            
+        # Update buttons
+        for button in self.buttons.values():
+            button.configure(bg=self.theme["button_color"], fg=self.theme["text_color"])
+            
+        # Update all pages
+        for page in self.pages.values():
+            page.update_theme(self.theme)
 
     def create_topbar(self, text=None):
         if hasattr(self, 'topbar'):
@@ -143,6 +182,15 @@ class FileSharingApp(tk.Tk):
         else:
             self.status_label.config(fg=self.offline_color)
             self.status_label.config(text=f"Status: {status}")
+            
+    def update_colors(self, background, text, button):
+        self.bg_color = background
+        self.text_color = text 
+        self.button_color = button
+        # update all pages
+        for page in self.pages.values():
+            if hasattr(page, '_update_page_colors'):
+                page._update_page_colors()
 
 class Page(tk.Frame):
     def __init__(self, parent, bg_color, text_color, button_color):
@@ -159,14 +207,31 @@ class Page(tk.Frame):
             print(f"Loading content for {self.__class__.__name__} page.")
         self.content_loaded = True
         self.create_content()
+        
+    def update_theme(self, theme):
+        self.bg_color = theme["bg_color"]
+        self.text_color = theme["text_color"]
+        self.button_color = theme["button_color"]
+        self.configure(bg=self.bg_color)
+        self.apply_theme_to_widgets()
+        
+    def apply_theme_to_widgets(self):
+        for widget in self.winfo_children():
+            if isinstance(widget, tk.Label):
+                widget.configure(bg=self.bg_color, fg=self.text_color)
+            elif isinstance(widget, Button):
+                widget.configure(bg=self.button_color, fg=self.text_color)
+            elif isinstance(widget, tk.Frame):
+                widget.configure(bg=self.bg_color)
+                for child in widget.winfo_children():
+                    if isinstance(child, tk.Label):
+                        child.configure(bg=self.bg_color, fg=self.text_color)
+                    elif isinstance(child, Button):
+                        child.configure(bg=self.button_color, fg=self.text_color)
 
     def reset_content(self):
         for widget in self.winfo_children():
             widget.destroy()
-
-    def create_content(self):
-       
-        raise NotImplementedError("Subclasses should implement this method.")
 
 class MyFilesPage(Page):
     def __init__(self, parent, bg_color, text_color, button_color):
@@ -386,6 +451,7 @@ class MyFilesPage(Page):
                     if save_path:
                         receive_network_file(Path(save_path), self.master.con, size)
                         print("Download complete.")
+                        self.master.con.sendall(AckMessage(200, "OK").construct_message_json().encode())
                     else:
                         print("Download cancelled.")
                         self.clear_socket_buffer()
@@ -543,6 +609,9 @@ class MyFilesPage(Page):
 class PerformancePage(Page):
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
+        self.data_rate = None
+        self.file_transfer_time = None
+        self.latency = None
 
     def create_content(self):
         self.master.create_topbar("Performance")
@@ -556,44 +625,72 @@ class PerformancePage(Page):
         )
         self.performance_label.pack(pady=10)
 
-        self.performance_text = tk.Text(
+        # self.performance_text = tk.Text(
+        #     self,
+        #     height=20,
+        #     width=80,
+        #     font=("Figtree", 12),
+        #     fg=self.text_color,
+        #     bg=self.bg_color
+        # )
+        # self.performance_text.pack(pady=10)
+        
+        self.data_rate_label = tk.Label(
             self,
-            height=20,
-            width=80,
-            font=("Figtree", 12),
+            text=f"Data Rate (MB/s): {self.data_rate}",
+            font=("Figtree", 14),
             fg=self.text_color,
             bg=self.bg_color
         )
-        self.performance_text.pack(pady=10)
+        self.data_rate_label.pack(pady=10)
+        
+        self.file_transfer_label = tk.Label(
+            self,
+            text=f"File Transfer Time (ms): {self.file_transfer_time}",
+            font=("Figtree", 14),
+            fg=self.text_color,
+            bg=self.bg_color
+        )
+        self.file_transfer_label.pack(pady=10)
+        
+        self.latency_label = tk.Label(
+            self,
+            text=f"Latency (ms): {self.latency}",
+            font=("Figtree", 14),
+            fg=self.text_color,
+            bg=self.bg_color
+        )
+        self.latency_label.pack(pady=10)
 
         self.get_stats()
 
-        # self.refresh_button = Button(
-        #     self,
-        #     text="Refresh",
-        #     command=self.refresh_performance,
-        #     font=("Figtree", 14),
-        #     bg=self.button_color,
-        #     fg=self.text_color,
-        #     borderless=1
-        # )
-        # self.refresh_button.pack(pady=10)
+    def update_labels(self):
+        data_rate_rounded = round(self.data_rate, 2) if self.data_rate is not None else 0
+        file_transfer_rounded = round(self.file_transfer_time, 2) if self.file_transfer_time is not None else 0
+        latency_rounded = round(self.latency, 2) if self.latency is not None else 0
+
+        self.data_rate_label.config(text=f"Data Rate (MB/s): {data_rate_rounded}")
+        self.file_transfer_label.config(text=f"File Transfer Time (ms): {file_transfer_rounded}")
+        self.latency_label.config(text=f"Latency (ms): {latency_rounded}")
+
     def get_stats(self):
         try:
             
             self.master.con.sendall(StatsMessage().construct_message_json().encode())
-            print("HERE")
             stats_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
             stats_message = MessageBasis.parse_from_json(stats_resp)
-            print("HERE2")
             if stats_message is not None and isinstance(stats_message, StatsMessage):
-                print(stats_message.data)
-                self.performance_text.delete(1.0, tk.END)
-                self.performance_text.insert(tk.END, stats_message)
+                self.data_rate = stats_message.data_rates()
+                self.file_transfer_time = stats_message.file_transfer_time()
+                self.latency = stats_message.latency()
+                self.update_labels()
             else:
                 self.show_error(f"Failed to get performance stats: {stats_message.message()}")
         except Exception as e:
             self.show_error(f"Error: {e}")
+
+    def refresh_stats(self):
+        self.get_stats()
 
     def show_error(self, message):
         self.after(0, lambda: messagebox.showerror("Error", message))
@@ -601,14 +698,102 @@ class PerformancePage(Page):
 class SettingsPage(Page):
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
+        self.current_colors = {
+            "bg_color": bg_color,
+            "text_color": text_color,
+            "button_color": button_color
+        }
+        self.reset_content()
 
     def create_content(self):
-        raise NotImplementedError("Subclasses should implement this method.")
+        title = tk.Label(
+            self,
+            text="Settings",
+            font=("Figtree", 24, "bold"),
+            bg= self.current_colors["bg_color"],
+            fg=self.current_colors["text_color"]
+        )
+        title.pack(pady=10)
+        
+        for color_key in self.current_colors:
+            frame = tk.Frame(self, bg=self.current_colors["bg_color"])
+            frame.pack(pady=10)
 
-    def save_settings(self, setting):
-        print(f"Setting saved: {setting}")
+            label = tk.Label(
+                frame,
+                text=f"{color_key.title()} Color:",
+                bg=self.current_colors["bg_color"],
+                fg=self.current_colors["text_color"]
+            )
+            label.pack(side=tk.LEFT, padx=10)
 
-class ConnectPage(Page):
+            preview = tk.Label(
+                frame,
+                width=10,
+                bg=self.current_colors[color_key]
+            )
+            preview.pack(side=tk.LEFT, padx=5)
+
+            btn = tk.Button(
+                frame,
+                text="Choose",
+                command=lambda k=color_key, p=preview: self.pick_color(k, p),
+                bg=self.current_colors["button_color"]
+            )
+            btn.pack(side=tk.LEFT, padx=5)
+
+        # Apply button
+        apply_btn = tk.Button(
+            self,
+            text="Apply Changes",
+            command=self.apply_colors,
+            bg=self.current_colors["button_color"]
+        )
+        apply_btn.pack(pady=20)
+
+        # Reset button
+        reset_btn = tk.Button(
+            self,
+            text="Reset to Defaults",
+            command=self.reset_colors,
+            bg=self.current_colors["button_color"]
+        )
+        reset_btn.pack(pady=5)
+
+    def pick_color(self, color_key, preview):
+        color = colorchooser.askcolor(color=self.current_colors[color_key])[1]
+        if color:
+            self.current_colors[color_key] = color
+            preview.configure(bg=color)
+            
+    def apply_colors(self):
+        self.master.update_theme(
+            self.current_colors["bg_color"],
+            self.current_colors["text_color"],
+            self.current_colors["button_color"]
+    )
+
+    def _update_page_colors(self):
+        for widget in self.winfo_children():
+            if isinstance(widget, tk.Label):
+                widget.configure(
+                    bg=self.current_colors["bg_color"],
+                    fg=self.current_colors["text_color"]
+                )
+            elif isinstance(widget, tk.Button):
+                widget.configure(bg=self.current_colors["bg_color"])
+            elif isinstance(widget, tk.Frame):
+                widget.configure(bg=self.current_colors["bg_color"])
+
+    def reset_colors(self):
+        self.current_colors = {
+            "bg_color": "#2C2C2C",
+            "text_color": "white",
+            "button_color": "#BB86FC"
+        }
+        self.apply_colors()
+
+class ConnectPage(Page):    
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
         self.username = ""

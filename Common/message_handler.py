@@ -583,6 +583,8 @@ class StatsMessage(MessageBasis):
         else:
             raise ValueError("Too many or not enough arguments")
         
+    def message_type(self) -> MessageType:
+        return MessageType.Stats
     def data(self) -> dict:
         return {}
     def data_response(self) -> dict:
