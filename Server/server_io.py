@@ -55,13 +55,14 @@ def UploadFile(handle: UploadHandle, socket: socket, frame_size: int) -> bool:
 def ExtractFileContents(path: Path, curr_user: Credentials) -> list[bytes] | HTTPErrorBasis:
     if path is None or not path.exists():
         return NotFoundError()
-    elif curr_user is None or not is_file_owner(path, curr_user):
-        if file_owner_db.get_file_owner(path) is None:
-            file_owner_db.set_file_owner(path, curr_user)
-        else:
-            return UnauthorizedError()
     elif not is_path_valid(path):
         return ForbiddenError()
+    
+    elif curr_user is None:
+        return UnauthorizedError()
+    
+    if file_owner_db.get_file_owner(path) is None:
+            file_owner_db.set_file_owner(path, curr_user)
     
     try:
         result = read_file_for_network(path)
