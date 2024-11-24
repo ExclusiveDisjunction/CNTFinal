@@ -324,7 +324,7 @@ def dir_resp_test() -> bool:
 
 
 if __name__ == "__main__":
-    if multi_thread_testing():
+    if send_big_file_test():
         print("\nAll tests passed")
     else:
         print("\nOne or more tests failed")

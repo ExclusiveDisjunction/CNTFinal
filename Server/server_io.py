@@ -37,6 +37,8 @@ def UploadFile(handle: UploadHandle, socket: socket, frame_size: int) -> bool:
     global file_owner_db
     if handle is None:
         return False
+    
+    print(f"[IO] Writing file of size {frame_size}")
 
     try:
         if not receive_network_file(handle.path, socket, frame_size):
