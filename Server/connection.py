@@ -197,7 +197,7 @@ def connection_proc(conn: ConnectionCore) -> None:
             while message is None:
                 try:
                     if not conn.lock():
-                        print("f[{addr_str}] Could not obtain lock, closing connection")
+                        print(f"[{addr_str}] Could not obtain lock, closing connection")
                         conn.unlock()
                         conn.drop()
                         return
@@ -249,6 +249,7 @@ def connection_proc(conn: ConnectionCore) -> None:
                         start_time = time.perf_counter()
 
                         send_message(conn.conn(), AckMessage(200, "OK"))
+                        print(f"[{addr_str}] Processing upload of frame size {size}")
 
                         # Now we get our file
                         if UploadFile(upload_handle, conn.conn(), size):
