@@ -250,6 +250,7 @@ def connection_proc(conn: ConnectionCore) -> None:
 
                         send_message(conn.conn(), AckMessage(200, "OK"))
                         print(f"[{addr_str}] Processing upload of frame size {size}")
+                        breakpoint()
 
                         # Now we get our file
                         if UploadFile(upload_handle, conn.conn(), size):
