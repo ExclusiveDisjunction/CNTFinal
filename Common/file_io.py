@@ -215,7 +215,7 @@ def split_binary_for_network(contents: bytes, buff_size: int = file_buffer_size)
     
     return list([contents[i * buff_size:(i+1) * buff_size] for i in range(int(ceil(len(contents) / buff_size))) ])
     
-def receive_network_file(path: Path, socket: socket, frame_size: int, buff_size: int = file_buffer_size) -> bool:
+def receive_network_file(path: Path, s: socket, frame_size: int, buff_size: int = file_buffer_size) -> bool:
     """
     Constructs the file sent over a network, assuming said file was sent using the split_binary_for_network protocol
     """
@@ -225,16 +225,21 @@ def receive_network_file(path: Path, socket: socket, frame_size: int, buff_size:
         
         with open(path, 'wb') as f:
             while frame_size > 0:
-                chunk = socket.recv(buff_size)
-                if chunk is None or len(chunk) == 0:
-                    print("[DEBUG] Network Rev Finished, chunks not all done.")
-                    return None
-            
-                f.write(chunk)
-                frame_size -= 1
+                try:
+                    chunk = s.recv(buff_size)
+                    if chunk is None or len(chunk) == 0:
+                        print("[DEBUG] Network Rev Finished, chunks not all done.")
+                        return None
+                
+                    f.write(chunk)
+                    frame_size -= 1
+                except socket.timeout:
+                    continue
 
+        print("[DEBUG IO] Completed network file recv")
         return True
-    except:
+    except Exception as e:
+        print(f"[DEBUG IO] Completed network file recv, failed with message '{str(e)}'")
         return False
 def receive_network_file_binary(socket: socket, frame_size: int, buff_size: int = file_buffer_size) -> bytes | None:
     """
