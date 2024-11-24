@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Self, Any
 from pathlib import Path
 
-from Server.io_tools import DirectoryInfo, FileType
+from Server.io_tools import FileType
 
 """
 

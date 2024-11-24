@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from socket import socket
 
-from Common.http_codes import *
+from Common.http_codes import HTTPErrorBasis, NotFoundError, UnauthorizedError, ForbiddenError, ConflictError
 from Common.message_handler import SubfolderAction
 from Common.file_io import receive_network_file, read_file_for_network
 from .credentials import Credentials

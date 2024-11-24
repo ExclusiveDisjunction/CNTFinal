@@ -33,7 +33,6 @@ try:
     threadPool.listen()
     print("Entering main loop...\n")
     threadPool.mainLoop()
-
 except KeyboardInterrupt:
     print(f"Keyboard interupt")
 except OSError as e:

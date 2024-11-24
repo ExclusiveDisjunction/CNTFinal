@@ -12,6 +12,7 @@ class ThreadPool:
 
     def bind(self, port: int, address: str = None):
         self.__socket.bind((address, port))
+        self.__socket.settimeout(4.0)
         self.__bound = True
 
     def listen(self):
@@ -43,12 +44,18 @@ class ThreadPool:
         return newConn
     
     def mainLoop(self):
+        print("[CONTROL] Entering main loop, accepting connections")
         while True:
-            c, addr = self.__socket.accept()
-            print(f"Accepted connection from {addr[0]} on port {addr[1]}")
+            try:
+                c, addr = self.__socket.accept()
 
-            open_conn = self.__get_next_open()
-            if open_conn == None:
-                raise Exception("An open connection could not be obtained")
-            open_conn.setup(c, addr)
-            open_conn.start()
+                open_conn = self.__get_next_open()
+                if open_conn == None:
+                    print("[CONTROL] Error! Could not get worker thread for connection. Closing connection")
+                    c.close()
+                else:
+                    print(f"[CONTROL] Accepted connection from {addr[0]} on port {addr[1]}")
+                    open_conn.setup(c, addr)
+                    open_conn.start()
+            except socket.timeout:  
+                continue
