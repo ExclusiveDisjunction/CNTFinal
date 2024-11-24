@@ -22,6 +22,8 @@ class ThreadPool:
         self.__socket.listen()
 
     def kill(self):
+        self.__socket.close()
+        
         for conn in self.__cons:
             conn.kill()
         self.__cons.clear()

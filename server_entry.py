@@ -34,13 +34,13 @@ try:
     print("Entering main loop...\n")
     threadPool.mainLoop()
 except KeyboardInterrupt:
-    print(f"Keyboard interupt")
+    print(f"\n[CONTROL] Keyboard Interupt")
 except OSError as e:
-    print(f"OS Exception: {str(e)}")
+    print(f"[CONTROL] OS Exception: {str(e)}")
 except Exception as e:
-    print(f"Unknown exception caught: {str(e)}")
+    print(f"[CONTROL] Unknown exception caught: {str(e)}")
 finally:
-    print(f"Shutting down thread pool")
+    print(f"[CONTROL] Terminating thread pool")
     threadPool.kill()
     
 user_database.save()
