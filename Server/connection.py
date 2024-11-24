@@ -212,8 +212,7 @@ def connection_proc(conn: ConnectionCore) -> None:
                 except socket.timeout:
                     continue # Blocking control
                 except ValueError:
-                    #print(f"[{addr_str}] Invalid message format.")
-                    pass
+                    print(f"[{addr_str}] Invalid message format.")
                 except Exception as e:
                     print(f"[{addr_str}] Caught unexpected error '{str(e)}'. Terminating")
                     conn.unlock()
@@ -253,7 +252,6 @@ def connection_proc(conn: ConnectionCore) -> None:
 
                         send_message(conn.conn(), AckMessage(200, "OK"))
                         print(f"[{addr_str}] Processing upload of frame size {size}")
-                        breakpoint()
 
                         # Now we get our file
                         if UploadFile(upload_handle, conn.conn(), size):
