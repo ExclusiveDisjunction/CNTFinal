@@ -73,7 +73,7 @@ class Connection:
             self.kill()
 
         self.__core = ConnectionCore(conn, addr, root_directory)
-        self.__core.conn().setblocking(3.0)
+        self.__core.conn().settimeout(3.0)
         self.__thread = threading.Thread(target=connection_proc, args=[self.__core])
 
     def is_connected(self):
