@@ -19,7 +19,7 @@ class FileSharingApp(tk.Tk):
 
         # window configuration
         self.title("File Sharing Platform")
-        self.geometry("1000x800")
+        self.geometry("900x700")
         self.configure(bg="#2C2C2C")
 
         # load fonts
@@ -280,7 +280,7 @@ class MyFilesPage(Page):
         )
         self.open_folder_button.pack(side=tk.LEFT, padx=5)
 
-        self.file_list = tk.Listbox(self, height=30, width=80, selectforeground=self.text_color, selectbackground=self.button_color, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
+        self.file_list = tk.Listbox(self, height=20, width=80, selectforeground=self.text_color, selectbackground=self.button_color, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
         self.file_list.pack(pady=10)
         self.file_list.bind("<<ListboxSelect>>", self.on_file_select)
         # self.file_list.bind("<Double-Button-1>", self.on_double_click) # Currently not working
