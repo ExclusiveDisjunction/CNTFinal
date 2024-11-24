@@ -263,6 +263,7 @@ def send_big_file_test() -> bool:
             socket.send(message.construct_message_json().encode())
 
         frames = read_file_for_network(Path("bigtext.txt"))
+        print(f"Sending {len(frames)} frames")
         send_message(s, UploadMessage("bigtext.txt", FileType.Text, len(frames)))
         ack = get_message(s)
         if ack is not None and isinstance(ack, AckMessage):
@@ -271,9 +272,6 @@ def send_big_file_test() -> bool:
             else:
                 sent_count = 0
                 for item in frames:
-                    if sent_count % 5 == 0: # We sleep every once in a for the buffer
-                        time.sleep(3.0)
-
                     s.sendall(item)
                     sent_count += 1
 

@@ -212,7 +212,8 @@ def connection_proc(conn: ConnectionCore) -> None:
                 except socket.timeout:
                     continue # Blocking control
                 except ValueError:
-                    print(f"[{addr_str}] Invalid message format.")
+                    #print(f"[{addr_str}] Invalid message format.")
+                    pass
                 except Exception as e:
                     print(f"[{addr_str}] Caught unexpected error '{str(e)}'. Terminating")
                     conn.unlock()
@@ -240,6 +241,8 @@ def connection_proc(conn: ConnectionCore) -> None:
                 case MessageType.Upload:
                     path, kind, size = message.name(), message.kind(), message.size()
 
+                    conn.conn().settimeout(None)
+
                     path = move_relative(path, conn.path())
                     upload_handle = RequestUpload(path, size, conn.cred())
                     if isinstance(upload_handle, HTTPErrorBasis):
@@ -255,11 +258,15 @@ def connection_proc(conn: ConnectionCore) -> None:
                         # Now we get our file
                         if UploadFile(upload_handle, conn.conn(), size):
                             responses.append(AckMessage(200, "OK"))
+                            print(f"[{addr_str}] Upload success")
                         else:
                             responses.append(AckMessage(HttpCodes.Conflict, "File upload failed"))
+                            print(f"[{addr_str}] Upload failed")
 
                         end_time = time.perf_counter()
                         network_analyzer.record_transfer(size * 4096, start_time, end_time, addr_str)
+
+                    conn.conn().settimeout(3.0)
 
                 case MessageType.Download:
                     path = message.path()

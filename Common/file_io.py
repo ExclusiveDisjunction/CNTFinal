@@ -220,6 +220,8 @@ def receive_network_file(path: Path, socket: socket, frame_size: int, buff_size:
     Constructs the file sent over a network, assuming said file was sent using the split_binary_for_network protocol
     """
     try:
+        
+
         if frame_size < 0:
             return False
         
