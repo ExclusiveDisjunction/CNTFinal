@@ -454,6 +454,7 @@ class MyFilesPage(Page):
                         self.master.con.sendall(AckMessage(200, "OK").construct_message_json().encode())
                     else:
                         print("Download cancelled.")
+                        self.master.con.sendall(AckMessage(400, "Download canceled by user").construct_message_json().encode())
                         self.clear_socket_buffer()
                 else:
                     print(f"Failed to download file because: {download_message.message()}")
