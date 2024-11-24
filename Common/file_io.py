@@ -215,7 +215,7 @@ def split_binary_for_network(contents: bytes, buff_size: int = file_buffer_size)
     
     result = list([contents[i * buff_size:(i+1) * buff_size] for i in range(int(ceil(len(contents) / buff_size))) ])
     if len(result) != 0:
-        result[-1].ljust(buff_size - len(result[-1]), b'\0')
+        result[-1].ljust(buff_size - len(result[-1]), b'\0') # We have to add trailing zeroes so that our data will always fit within the buffer & the recv will work properly
 
     return result
     
@@ -233,24 +233,23 @@ def receive_network_file(path: Path, s: socket, frame_size: int, buff_size: int 
         with open(path, 'wb') as f:
             while frame_size > 0:
                 try:
-                    print(f"{frame_size}", end=" ")
                     chunk = s.recv(buff_size)
                     if chunk is None or len(chunk) == 0:
                         print("[DEBUG] Network Rev Finished, chunks not all done.")
                         return False
                 
-                    f.write(chunk.rstrip(b'\0'))
+                    f.write(chunk.rstrip(b'\0')) # Remove trailing zeroes from buffer packing
                     frame_size -= len(chunk)
                 except socket.timeout:
                     if retry_count <= 0:
+                        print(f"[IO] Network file recv failed because of retry fails")
                         return False
                     retry_count -= 1
                     continue
 
-        print("[DEBUG IO] Completed network file recv")
         return True
     except Exception as e:
-        print(f"[DEBUG IO] Completed network file recv, failed with message '{str(e)}'")
+        print(f"[IO] Network file recv failed with message '{str(e)}'")
         return False
 def receive_network_file_binary(socket: socket, frame_size: int, buff_size: int = file_buffer_size) -> bytes | None:
     """
