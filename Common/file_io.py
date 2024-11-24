@@ -226,6 +226,7 @@ def receive_network_file(path: Path, s: socket, frame_size: int, buff_size: int 
         with open(path, 'wb') as f:
             while frame_size > 0:
                 try:
+                    print(f"{frame_size}", end=" ")
                     chunk = s.recv(buff_size)
                     if chunk is None or len(chunk) == 0:
                         print("[DEBUG] Network Rev Finished, chunks not all done.")
