@@ -51,7 +51,7 @@ def client_test_server() -> bool:
         def send_message(socket, message: MessageBasis):
             socket.send(message.construct_message_json().encode())
 
-        target_path = Path("audio.mp3")
+        target_path = Path("04:28 Skit.mp4")
         file_contents = read_file_for_network(target_path)
         send_message(s, UploadMessage(target_path, FileType.Audio, len(file_contents)))
         ack = get_message(s)
@@ -72,14 +72,14 @@ def client_test_server() -> bool:
                     else:
                         print("Upload success")
         
-        send_message(s, DownloadMessage("audio.mp3"))
+        send_message(s, DownloadMessage("04:28 Skit.mp4"))
         download_resp = get_message(s)
         if download_resp is not None and isinstance(download_resp, DownloadMessage):
             send_message(s, AckMessage(200, "OK"))
             if download_resp.status() == 200:
                 print("Downloading file")
                 size = download_resp.size()
-                receive_network_file(Path("audio_download.mp3"), s, size)
+                receive_network_file(Path("04:28 Skit2.mp4"), s, size)
                 
                 print("Download success")
             else:

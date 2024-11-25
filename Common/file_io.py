@@ -244,6 +244,11 @@ def receive_network_file(path: Path, s: socket, frame_size: int, buff_size: int 
                     if chunk is None or len(chunk) == 0:
                         print("[DEBUG] Network Rev Finished, chunks not all done.")
                         return False
+                    
+                    if frame_size <= buff_size: # Last packet
+                        f.write(chunk.rstrip(b'\x00')) # Remove trailing zeroes from buffer packing
+                    else:
+                        f.write(chunk)
                 
                     f.write(chunk.rstrip(b'\x00')) # Remove trailing zeroes from buffer packing
                     frame_size -= len(chunk)
@@ -280,7 +285,11 @@ def receive_network_file_binary(socket: socket, frame_size: int, buff_size: int 
                     print("[DEBUG] Network Rev Finished, chunks not all done.")
                     return None
             
-                result += chunk.rstrip(b'\x00') # Remove trailing zeroes from buffer packing
+                if frame_size < buff_size: # Last packet
+                    result += chunk.rstrip(b'\x00') # Remove trailing zeroes from buffer packing
+                else:
+                    result += chunk
+
                 frame_size -= len(chunk)
                 windows_so_far += len(chunk) / buff_size
             except socket.timeout:
