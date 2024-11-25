@@ -187,7 +187,7 @@ def connection_proc(conn: ConnectionCore) -> None:
         print(f"[{addr_str}] Authentication success.")
         conn.set_cred(target_cred)
 
-    buff_size = 1024
+    buff_size = 65536  # Increased buffer size
 
     try:
         while True:
@@ -202,7 +202,7 @@ def connection_proc(conn: ConnectionCore) -> None:
                         conn.drop()
                         return
 
-                    message = recv_message(conn.conn(), 1024)
+                    message = recv_message(conn.conn(), buff_size)
                     if message is None: # Conn terminated
                         print(f"[{addr_str}] Connection terminated.")
                         conn.unlock()

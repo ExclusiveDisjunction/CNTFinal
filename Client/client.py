@@ -871,8 +871,8 @@ class ConnectPage(Page):
         super().__init__(parent, bg_color, text_color, button_color)
         self.username = ""
         self.password = ""
-        self.ip = "127.0.0.1"
-        self.port = 61324
+        self.ip = "34.45.176.39"
+        self.port = 3389
         self.create_content()
 
     # hashes password with sha256

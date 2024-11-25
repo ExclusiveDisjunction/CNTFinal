@@ -5,7 +5,7 @@ from math import ceil
 from socket import socket
 from typing import Self
 
-file_buffer_size = 4096
+file_buffer_size = 65536  # Increased buffer size
 
 class FileType(Enum):
     Text = "text"

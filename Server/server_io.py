@@ -41,7 +41,7 @@ def UploadFile(handle: UploadHandle, socket: socket, frame_size: int) -> bool:
     print(f"[IO] Writing file of size {frame_size}")
 
     try:
-        if not receive_network_file(handle.path, socket, frame_size):
+        if not receive_network_file(handle.path, socket, frame_size, buff_size=65536):  # Increased buffer size
             try:
                 os.remove(handle.path)
             except: # We dont really care, its just to make sure the old file isn't kept.
@@ -120,5 +120,5 @@ def ModifySubdirectories(path: Path, action: SubfolderAction) -> None | HTTPErro
             except PermissionError:
                 return ConflictError("Permission denied")
             except OSError as e:
-                return ConflictError(str(e))                
-                
+                return ConflictError(str(e))
+
