@@ -472,31 +472,42 @@ class MyFilesPage(Page):
     def _download_files(self):
         try:
             selected_file = self.file_list.get(self.file_list.curselection())
-            if selected_file is None or len(selected_file) == 0:
+            if not selected_file:
                 return
+                
             file_name = selected_file.split(" ")[0].strip()
-            self.master.con.sendall(DownloadMessage(file_name).construct_message_json().encode()) 
-
+            
+            save_path = filedialog.asksaveasfilename(
+                defaultextension=Path(file_name).suffix,
+                initialfile=file_name
+            )
+            if not save_path:
+                return
+                
+            # Ensures proper path construction for download request
+            download_path = Path(self.current_dir) / file_name if self.current_dir else file_name
+            
+            self.master.con.sendall(DownloadMessage(str(download_path)).construct_message_json().encode())
+            
             download_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
             download_message = MessageBasis.parse_from_json(download_resp)
-            if download_message is not None and isinstance(download_message, DownloadMessage):
-                self.master.con.sendall(AckMessage(200, "OK").construct_message_json().encode())
+            
+            if download_message and isinstance(download_message, DownloadMessage):
                 if download_message.status() == 200:
-                    print("Downloading file...")
+                    self.master.con.sendall(AckMessage(200, "OK").construct_message_json().encode())
                     size = download_message.size()
-                    save_path = filedialog.asksaveasfilename(defaultextension=".*", initialfile=file_name)
-                    if save_path:
-                        receive_network_file(Path(save_path), self.master.con, size)
-                        print("Download complete.")
+                    
+                    if receive_network_file(Path(save_path), self.master.con, size):
                         self.master.con.sendall(AckMessage(200, "OK").construct_message_json().encode())
+                        messagebox.showinfo("Success", "File downloaded successfully")
                     else:
-                        print("Download cancelled.")
-                        self.master.con.sendall(AckMessage(400, "Download canceled by user").construct_message_json().encode())
-                        self.clear_socket_buffer()
+                        self.master.con.sendall(AckMessage(400, "File transfer failed").construct_message_json().encode())
+                        messagebox.showerror("Error", "File transfer failed")
                 else:
-                    print(f"Failed to download file because: {download_message.message()}")
+                    messagebox.showerror("Error", f"Download failed: {download_message.message()}")
         except Exception as e:
-            print(f"Error: {e}")
+            messagebox.showerror("Error", f"Download error: {str(e)}")
+            self.clear_socket_buffer()
 
     # thread for deleting files
     def delete_files(self):
