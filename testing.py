@@ -51,7 +51,6 @@ def client_test_server() -> bool:
         def send_message(socket, message: MessageBasis):
             socket.send(message.construct_message_json().encode())
 
-        """
         target_path = Path("audio.mp3")
         file_contents = read_file_for_network(target_path)
         send_message(s, UploadMessage(target_path, FileType.Audio, len(file_contents)))
@@ -72,7 +71,6 @@ def client_test_server() -> bool:
                         print(f"Upload failed because '{ack.message()}'")
                     else:
                         print("Upload success")
-        """
         
         send_message(s, DownloadMessage("audio.mp3"))
         download_resp = get_message(s)
@@ -86,6 +84,7 @@ def client_test_server() -> bool:
                 print("Download success")
             else:
                 print(f"Download failed because of reason: {download_resp.message()}")
+        send_message(s, AckMessage(200, "OK"))
         
 
         """         

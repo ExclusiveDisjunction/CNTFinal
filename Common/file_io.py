@@ -263,19 +263,34 @@ def receive_network_file_binary(socket: socket, frame_size: int, buff_size: int 
     """
     Constructs the file sent over a network, assuming said file was sent using the split_binary_for_network protocol
     """
+    retry_count = 5
     try:
         if frame_size < 0:
             return False
         
+        total_windows = frame_size
+        frame_size *= buff_size
+        windows_so_far = 0.0
+
         result = b''
-        while frame_size > 0:
-            this = socket.recv(buff_size)
-            if this is None or len(this) == 0:
-                return None
+        while frame_size > 0 and windows_so_far < total_windows:
+            try:
+                chunk = socket.recv(buff_size)
+                if chunk is None or len(chunk) == 0:
+                    print("[DEBUG] Network Rev Finished, chunks not all done.")
+                    return False
             
-            result += this
-            frame_size -= 1
-    
-        return result
-    except:
-        return None
+                result += chunk.rstrip(b'\x00') # Remove trailing zeroes from buffer packing
+                frame_size -= len(chunk)
+                windows_so_far += len(chunk) / buff_size
+            except socket.timeout:
+                if retry_count <= 0:
+                    print(f"[IO] Network file recv failed because of retry fails")
+                    return False
+                retry_count -= 1
+                continue
+
+        return True
+    except Exception as e:
+        print(f"[IO] Network file recv failed with message '{str(e)}'")
+        return False
