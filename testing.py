@@ -51,7 +51,8 @@ def client_test_server() -> bool:
         def send_message(socket, message: MessageBasis):
             socket.send(message.construct_message_json().encode())
 
-        target_path = Path("audio.m4a")
+        """
+        target_path = Path("audio.mp3")
         file_contents = read_file_for_network(target_path)
         send_message(s, UploadMessage(target_path, FileType.Audio, len(file_contents)))
         ack = get_message(s)
@@ -63,7 +64,7 @@ def client_test_server() -> bool:
                 for item in file_contents:
                     s.sendall(item)
                     sent_count += 1
-
+        
                 assert sent_count == len(file_contents), "Failed to send all items"
                 ack = get_message(s)
                 if ack is not None and isinstance(ack, AckMessage):
@@ -71,15 +72,16 @@ def client_test_server() -> bool:
                         print(f"Upload failed because '{ack.message()}'")
                     else:
                         print("Upload success")
+        """
         
-        send_message(s, DownloadMessage("thingone.txt"))
+        send_message(s, DownloadMessage("audio.mp3"))
         download_resp = get_message(s)
         if download_resp is not None and isinstance(download_resp, DownloadMessage):
             send_message(s, AckMessage(200, "OK"))
             if download_resp.status() == 200:
                 print("Downloading file")
                 size = download_resp.size()
-                receive_network_file(Path("thingone.txt"), s, size)
+                receive_network_file(Path("audio_download.mp3"), s, size)
                 
                 print("Download success")
             else:
