@@ -213,27 +213,48 @@ def split_binary_for_network(contents: bytes, buff_size: int = file_buffer_size)
     if contents is None:
         return None
     
-    return list([contents[i * buff_size:(i+1) * buff_size] for i in range(int(ceil(len(contents) / buff_size))) ])
+    result = list([contents[i * buff_size:(i+1) * buff_size] for i in range(int(ceil(len(contents) / buff_size))) ])
+    if len(result) != 0:
+        result[-1].ljust(buff_size - len(result[-1]), b'\0') # We have to add trailing zeroes so that our data will always fit within the buffer & the recv will work properly
+
+    return result
     
-def receive_network_file(path: Path, socket: socket, frame_size: int, buff_size: int = file_buffer_size) -> bool:
+def receive_network_file(path: Path, s: socket, frame_size: int, buff_size: int = file_buffer_size) -> bool:
     """
     Constructs the file sent over a network, assuming said file was sent using the split_binary_for_network protocol
     """
+    retry_count = 5
     try:
         if frame_size < 0:
             return False
         
+        total_windows = frame_size
+        frame_size *= buff_size
+        windows_so_far = 0.0
+        
         with open(path, 'wb') as f:
-            while frame_size > 0:
-                chunk = socket.recv(buff_size)
-                if chunk is None or len(chunk) == 0:
-                    return None
-            
-                f.write(chunk)
-                frame_size -= 1
+            while frame_size > 0 and windows_so_far < total_windows:
+                try:
+                    chunk = s.recv(buff_size)
+                    if chunk is None or len(chunk) == 0:
+                        print("[DEBUG] Network Rev Finished, chunks not all done.")
+                        return False
+                
+                    f.write(chunk.rstrip(b'\0')) # Remove trailing zeroes from buffer packing
+                    
+                    frame_size -= len(chunk)
+                    windows_so_far += len(chunk) / buff_size
+                    print(windows_so_far, end=" ")
+                except socket.timeout:
+                    if retry_count <= 0:
+                        print(f"[IO] Network file recv failed because of retry fails")
+                        return False
+                    retry_count -= 1
+                    continue
 
         return True
-    except:
+    except Exception as e:
+        print(f"[IO] Network file recv failed with message '{str(e)}'")
         return False
 def receive_network_file_binary(socket: socket, frame_size: int, buff_size: int = file_buffer_size) -> bytes | None:
     """

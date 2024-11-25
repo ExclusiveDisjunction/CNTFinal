@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from socket import socket
 
-from Common.http_codes import *
+from Common.http_codes import HTTPErrorBasis, NotFoundError, UnauthorizedError, ForbiddenError, ConflictError
 from Common.message_handler import SubfolderAction
 from Common.file_io import receive_network_file, read_file_for_network
 from .credentials import Credentials
@@ -37,6 +37,8 @@ def UploadFile(handle: UploadHandle, socket: socket, frame_size: int) -> bool:
     global file_owner_db
     if handle is None:
         return False
+    
+    print(f"[IO] Writing file of size {frame_size}")
 
     try:
         if not receive_network_file(handle.path, socket, frame_size):
@@ -55,13 +57,14 @@ def UploadFile(handle: UploadHandle, socket: socket, frame_size: int) -> bool:
 def ExtractFileContents(path: Path, curr_user: Credentials) -> list[bytes] | HTTPErrorBasis:
     if path is None or not path.exists():
         return NotFoundError()
-    elif curr_user is None or not is_file_owner(path, curr_user):
-        if file_owner_db.get_file_owner(path) is None:
-            file_owner_db.set_file_owner(path, curr_user)
-        else:
-            return UnauthorizedError()
     elif not is_path_valid(path):
         return ForbiddenError()
+    
+    elif curr_user is None:
+        return UnauthorizedError()
+    
+    if file_owner_db.get_file_owner(path) is None:
+            file_owner_db.set_file_owner(path, curr_user)
     
     try:
         result = read_file_for_network(path)

@@ -1,14 +1,17 @@
 import threading
-from socket import socket as soc
+import socket
+import time
 
-from .credentials import *
-from .io_tools import root_directory, move_relative, create_directory_info, make_relative, get_file_type
-from .server_io import *
+from .credentials import Credentials, user_database
+from .io_tools import root_directory, move_relative, create_directory_info, make_relative, get_file_type, is_path_valid
+from .network_analysis import network_analyzer
+from .server_io import RequestUpload, UploadFile, ExtractFileContents, DeleteFile, ModifySubdirectories
 from Common.message_handler import *
-from Common.file_io import receive_network_file, read_file_for_network, split_binary_for_network
+from Common.file_io import split_binary_for_network
+from Common.http_codes import HttpCodes, HTTPErrorBasis
 
 class ConnectionCore:
-    def __init__(self, conn: soc, addr, path: Path):
+    def __init__(self, conn: socket.socket, addr, path: Path):
         if path is None:
             raise ValueError("Path cannot be None")
 
@@ -47,7 +50,7 @@ class ConnectionCore:
 
     def addr(self):
         return self.__addr
-    def conn(self) -> soc | None:
+    def conn(self) -> socket.socket | None:
         return self.__conn
     def cred(self) -> Credentials | None:
         return self.__cred
@@ -63,13 +66,14 @@ class Connection:
         self.__core = None
         self.__thread = None
 
-    def setup(self, conn: soc, addr):
+    def setup(self, conn: socket.socket, addr):
         global root_directory
 
         if self.is_connected():
             self.kill()
 
         self.__core = ConnectionCore(conn, addr, root_directory)
+        self.__core.conn().settimeout(3.0)
         self.__thread = threading.Thread(target=connection_proc, args=[self.__core])
 
     def is_connected(self):
@@ -86,7 +90,7 @@ class Connection:
     def start(self):
         if self.__thread == None or self.__thread.is_alive():
             raise RuntimeError("Could not start this thread knowing that the thread is non-existent or is already running")
-        self.__thread.run()
+        self.__thread.start()
     def join(self):
         if self.__thread != None and self.__thread.is_alive():
             self.__thread.join()
@@ -98,39 +102,63 @@ class Connection:
             self.__thread = None
             self.__core = None
 
-def recv_message(connection: soc, buff_size: int) -> MessageBasis | None:
+def recv_message(connection: socket.socket, buff_size: int) -> MessageBasis | None:
     try:
         contents = connection.recv(buff_size)
-    except:
-        contents = None
 
-    if contents is None or len(contents) == 0:
-        return None
+        if contents is None or len(contents) == 0:
+            return None # Connection closed
+    except socket.timeout as e:
+        raise e
+    except Exception as e: # Unexpected error
+        raise e
     
     result = MessageBasis.parse_from_json(contents)
     if result is None:
-        return None
+        raise ValueError("Invalid format")
     else:
         return result
-def send_message(connection: soc, message: MessageBasis, response: bool = True):
+def send_message(connection: socket.socket, message: MessageBasis, response: bool = True):
     connection.sendall(message.construct_message_json(request=not response).encode())
 
 def connection_proc(conn: ConnectionCore) -> None:
     global user_database
+    global network_analyzer
 
     addr_str = conn.addr()[0]
     print(f"[{addr_str}] Started connection proc")
-    if not conn.lock():
-        return
     
+    conn.conn().settimeout(3.0)
     print(f"[{addr_str}] Awaiting Connect message...")
 
-    conn_msg = recv_message(conn.conn(), 1024)
-    if conn_msg is None or not isinstance(conn_msg, ConnectMessage):
-        print(f"[{addr_str}] Connection dropped or message is of invalid format")
-        conn.unlock()
-        conn.drop()
-        return
+    conn_msg = None
+    while conn_msg is None:
+        try:
+            if not conn.lock():
+                print("f[{addr_str}] Closing connection")
+
+            conn_msg = recv_message(conn.conn(), 1024)
+            if conn_msg is None: # Conn terminated
+                print(f"[{addr_str}] Connection terminated.")
+                conn.unlock()
+                conn.drop()
+                return
+            if not isinstance(conn_msg, ConnectMessage):
+                print(f"[{addr_str}] Expected ConnectMessage, got '{conn_msg.message_type().value}'. Trying again.")
+                continue
+
+        except socket.timeout:
+            continue # Blocking control
+        except ValueError:
+            print(f"[{addr_str}] Invalid message format. Expected ConnectionMessage")
+        except Exception as e:
+            print(f"[{addr_str}] Caught unexpected error '{str(e)}'. Terminating")
+            conn.unlock()
+            conn.drop()
+
+            return 
+        finally:
+            conn.unlock()
     
     target_cred = Credentials(conn_msg.username(), conn_msg.passwordHash())
     user_lookup = user_database.get_user(target_cred.getUsername())
@@ -146,31 +174,56 @@ def connection_proc(conn: ConnectionCore) -> None:
         else:
             connect_ack = AckMessage(HttpCodes.Ok, f"Welcome back, '{target_cred.getUsername()}'")
 
+    if not conn.lock():
+        print("f[{addr_str}] Closing connection")
     send_message(conn.conn(), connect_ack)
+
+    conn.unlock()
     if not keep_connection:
         print(f"[{addr_str}] Authentication failed for user. Closing connection")
-        conn.unlock()
         conn.drop()
         return
     else:
         print(f"[{addr_str}] Authentication success.")
         conn.set_cred(target_cred)
-        conn.unlock()
 
     buff_size = 1024
 
     try:
-        while conn.lock():
+        while True:
             # This is our message loop. It will accept messages, process them, and then perform the actions needed.
             
-            message = recv_message(conn.conn(), buff_size)
-            if message is None:
-                print(f"[{addr_str}] Connection terminated or invalid format with message")
-                conn.unlock()
-                conn.drop()
-                return
+            message = None
+            while message is None:
+                try:
+                    if not conn.lock():
+                        print(f"[{addr_str}] Could not obtain lock, closing connection")
+                        conn.unlock()
+                        conn.drop()
+                        return
+
+                    message = recv_message(conn.conn(), 1024)
+                    if message is None: # Conn terminated
+                        print(f"[{addr_str}] Connection terminated.")
+                        conn.unlock()
+                        conn.drop()
+                        return
+
+                except socket.timeout:
+                    continue # Blocking control
+                except ValueError:
+                    print(f"[{addr_str}] Invalid message format.")
+                except Exception as e:
+                    print(f"[{addr_str}] Caught unexpected error '{str(e)}'. Terminating")
+                    conn.unlock()
+                    conn.drop()
+                finally:
+                    conn.unlock()
             
             print(f"[{addr_str}] Processing request of kind {message.message_type().value}")
+
+            if not conn.lock(): # We need our socket
+                print(f"[{addr_str}] Closing connection")
 
             responses = []
             match message.message_type():
@@ -187,19 +240,31 @@ def connection_proc(conn: ConnectionCore) -> None:
                 case MessageType.Upload:
                     path, kind, size = message.name(), message.kind(), message.size()
 
+                    conn.conn().settimeout(None)
+
                     path = move_relative(path, conn.path())
                     upload_handle = RequestUpload(path, size, conn.cred())
                     if isinstance(upload_handle, HTTPErrorBasis):
                         responses.append(upload_handle.to_ack())
                         upload_handle = None
                     else:
+                        start_time = time.perf_counter()
+
                         send_message(conn.conn(), AckMessage(200, "OK"))
+                        print(f"[{addr_str}] Processing upload of frame size {size}")
 
                         # Now we get our file
                         if UploadFile(upload_handle, conn.conn(), size):
                             responses.append(AckMessage(200, "OK"))
+                            print(f"[{addr_str}] Upload success")
                         else:
                             responses.append(AckMessage(HttpCodes.Conflict, "File upload failed"))
+                            print(f"[{addr_str}] Upload failed")
+
+                        end_time = time.perf_counter()
+                        network_analyzer.record_transfer(size * 4096, start_time, end_time, addr_str)
+
+                    conn.conn().settimeout(3.0)
 
                 case MessageType.Download:
                     path = message.path()
@@ -213,19 +278,34 @@ def connection_proc(conn: ConnectionCore) -> None:
                         kind = get_file_type(path)
                         size = len(file_contents)
 
+                        start_time = time.perf_counter()
+
                         send_message(conn.conn(), DownloadMessage(HttpCodes.Ok, "OK", kind, size))
                         
                         try:
                             ack = recv_message(conn.conn(), buff_size)
                             if ack is None or not isinstance(ack, AckMessage):
-                                raise ValueError("Could not parse ack")
+                                print(f"[{addr_str}] Message recieved, expected ack, but got {ack.message_type().value if ack is not None else None}")
                             
                             if ack.code() == 200:
                                 for item in file_contents:
                                     conn.conn().sendall(item)
-
                             else:
-                                print(f'[{addr_str}] Upload failed because of {ack.message()}')
+                                print(f'[{addr_str}] Could not download because of {ack.message()}')
+
+                            ack = recv_message(conn.conn(), buff_size)
+                            if ack is None or not isinstance(ack, AckMessage):
+                                print(f"[{addr_str}] Message recieved, expected ack, but got {ack.message_type().value if ack is not None else None}")
+
+                            
+                            if ack.code() == 200:
+                                print(f'[{addr_str}] Download completed')
+                            else:
+                                print(f'[{addr_str}] Could not download because of {ack.message()}. Stats are still recorded')
+
+                            end_time = time.perf_counter()
+                            network_analyzer.record_transfer(size * 4096, start_time, end_time, addr_str)
+                            
                         except Exception as e:
                             responses.append(AckMessage(HttpCodes.Conflict, str(e)))
 
@@ -282,9 +362,11 @@ def connection_proc(conn: ConnectionCore) -> None:
                     else:
                         responses.append(result.to_ack())
                 case MessageType.Stats:
-                    # Get stats
-                    responses.append(StatsMessage(0, 0, 0))
-
+                    last = network_analyzer.get_last_ip_stats(addr_str)
+                    responses.append(
+                        StatsMessage(last.data_rate, last.transfer_time, last.latency) if last is not None else StatsMessage(0, 0, 0)
+                    )
+                    
             print(f"[{addr_str}] Response contains {len(responses)} message(s)")
             if responses is not None and len(responses) != 0:
                 for response in responses:
@@ -302,3 +384,5 @@ def connection_proc(conn: ConnectionCore) -> None:
         conn.unlock()
         conn.drop()
         return
+    finally:
+        conn.unlock()

@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Self, Any
 from pathlib import Path
 
-from Server.io_tools import DirectoryInfo, FileType
+from Server.io_tools import FileType
 
 """
 
@@ -583,6 +583,8 @@ class StatsMessage(MessageBasis):
         else:
             raise ValueError("Too many or not enough arguments")
         
+    def message_type(self) -> MessageType:
+        return MessageType.Stats
     def data(self) -> dict:
         return {}
     def data_response(self) -> dict:

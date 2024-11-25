@@ -5,20 +5,26 @@ import socket
 from tkinter import font as tkFont
 from tkinter import messagebox, filedialog
 from tkinter import simpledialog
+from tkinter import colorchooser
 from tkmacosx import Button
 import hashlib
 from Common.message_handler import *
 from Common.file_io import FileInfo, get_file_type, FileType, read_file_for_network, DirectoryInfo, receive_network_file_binary, receive_network_file
 
 class FileSharingApp(tk.Tk):
+    """
+    Main application window for the file sharing platform.
+    Inherits from tk.Tk to create the root window.
+    """
     def __init__(self):
         super().__init__()
-
+        
+        # socket connection instance
         self.con = None
 
         # window configuration
         self.title("File Sharing Platform")
-        self.geometry("1000x800")
+        self.geometry("900x700")
         self.configure(bg="#2C2C2C")
 
         # load fonts
@@ -33,6 +39,14 @@ class FileSharingApp(tk.Tk):
         self.text_color = "white"
         self.online_color = "lime"
         self.offline_color = "red"
+        
+        self.theme = {
+            "bg_color": "#2C2C2C",
+            "text_color": "white",
+            "button_color": "#BB86FC",
+            "sidebar_color": "#3D3D3D",
+            "topbar_color": "#545454"
+        }
 
         # initialize UI elements
         self.current_page = None
@@ -42,7 +56,39 @@ class FileSharingApp(tk.Tk):
         self.create_sidebar()
         self.create_pages()
         self.show_page("Connect")
-
+        
+    def update_theme(self, bg_color, text_color, button_color):
+        self.theme.update({
+            "bg_color": bg_color,
+            "text_color": text_color,
+            "button_color": button_color
+        })
+        self.apply_theme()
+    
+    # apply theme to all widgets
+    def apply_theme(self):
+        # Update main window
+        self.configure(bg=self.theme["bg_color"])
+        
+        # Update sidebar
+        if hasattr(self, 'sidebar'):
+            self.sidebar.configure(bg=self.theme["sidebar_color"])
+            self.status_label.configure(bg=self.theme["sidebar_color"], fg=self.theme["text_color"])
+            
+        # Update topbar
+        if hasattr(self, 'topbar'):
+            self.topbar.configure(bg=self.theme["topbar_color"])
+            self.title_label.configure(bg=self.theme["topbar_color"], fg=self.theme["text_color"])
+            
+        # Update buttons
+        for button in self.buttons.values():
+            button.configure(bg=self.theme["button_color"], fg=self.theme["text_color"])
+            
+        # Update all pages
+        for page in self.pages.values():
+            page.update_theme(self.theme)
+            
+    # create topbar
     def create_topbar(self, text=None):
         if hasattr(self, 'topbar'):
             self.title_label.config(text=text)
@@ -60,6 +106,7 @@ class FileSharingApp(tk.Tk):
             )
             self.title_label.pack()
 
+    # create sidebar
     def create_sidebar(self):
         self.sidebar = tk.Frame(self, width=200, bg=self.sidebar_color)
         self.sidebar.pack(side="left", fill="y")
@@ -80,11 +127,13 @@ class FileSharingApp(tk.Tk):
         self.status_label.pack(pady=20)
         self.create_topbar()
 
+    # create sidebar button
     def create_sidebar_button(self, text, command, padding=(10, 10), stateE=tk.NORMAL):
         button = Button(self.sidebar, text=text, font=("Figtree", 14), bg=self.button_color, fg=self.text_color, state=stateE, command=command, borderless=1)
         button.pack(fill="x", pady=padding)
         return button
 
+    # create pages
     def create_pages(self):
         # Instantiate the pages
         self.pages["My Files"] = MyFilesPage(self, self.bg_color, self.text_color, self.button_color)
@@ -93,6 +142,7 @@ class FileSharingApp(tk.Tk):
         self.pages["Settings"] = SettingsPage(self, self.bg_color, self.text_color, self.button_color)
         self.pages["Connect"] = ConnectPage(self, self.bg_color, self.text_color, self.button_color)
 
+    # enable buttons depending on state of application
     def enable_buttons(self):
         if "Connect" in self.buttons:
             self.buttons["Connect"].config(state=tk.DISABLED)
@@ -100,6 +150,7 @@ class FileSharingApp(tk.Tk):
             if button is not None:
                 button.config(state=tk.NORMAL)
 
+    # show specific pages
     def show_page(self, page_name):
         if page_name not in self.pages:
             print(f"Error: {page_name} does not exist.")
@@ -128,6 +179,7 @@ class FileSharingApp(tk.Tk):
 
     def show_connect(self):
         self.show_page("Connect")
+    
 
     def select_button(self, button, command):
         if self.current_button:
@@ -135,7 +187,8 @@ class FileSharingApp(tk.Tk):
         self.current_button = self.buttons[button]
         self.current_button.config(bg=self.button_hover_color)
         command()
-
+        
+    # update status label
     def status_update(self, status):
         if status == "Online":
             self.status_label.config(fg=self.online_color)
@@ -143,8 +196,22 @@ class FileSharingApp(tk.Tk):
         else:
             self.status_label.config(fg=self.offline_color)
             self.status_label.config(text=f"Status: {status}")
+    
+    # update colors for all pages
+    def update_colors(self, background, text, button):
+        self.bg_color = background
+        self.text_color = text 
+        self.button_color = button
+        # update all pages
+        for page in self.pages.values():
+            if hasattr(page, '_update_page_colors'):
+                page._update_page_colors()
 
 class Page(tk.Frame):
+    """
+    Base class for all pages in the application.
+    Provides common functionality for theme management and content loading.
+    """
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg=bg_color)
         self.bg_color = bg_color
@@ -152,6 +219,7 @@ class Page(tk.Frame):
         self.button_color = button_color
         self.content_loaded = False
 
+    # loads content
     def load_content(self):
         if self.content_loaded:
             self.reset_content()
@@ -160,19 +228,44 @@ class Page(tk.Frame):
         self.content_loaded = True
         self.create_content()
 
+    #updates themes for pages
+    def update_theme(self, theme):
+        self.bg_color = theme["bg_color"]
+        self.text_color = theme["text_color"]
+        self.button_color = theme["button_color"]
+        self.configure(bg=self.bg_color)
+        self.apply_theme_to_widgets()
+    
+    # applys themes to widgets
+    def apply_theme_to_widgets(self):
+        for widget in self.winfo_children():
+            if isinstance(widget, tk.Label):
+                widget.configure(bg=self.bg_color, fg=self.text_color)
+            elif isinstance(widget, Button):
+                widget.configure(bg=self.button_color, fg=self.text_color)
+            elif isinstance(widget, tk.Frame):
+                widget.configure(bg=self.bg_color)
+                for child in widget.winfo_children():
+                    if isinstance(child, tk.Label):
+                        child.configure(bg=self.bg_color, fg=self.text_color)
+                    elif isinstance(child, Button):
+                        child.configure(bg=self.button_color, fg=self.text_color)
+
+    # reset content
     def reset_content(self):
         for widget in self.winfo_children():
             widget.destroy()
 
-    def create_content(self):
-       
-        raise NotImplementedError("Subclasses should implement this method.")
-
 class MyFilesPage(Page):
+    """
+    Page for displaying and managing user's files.
+    Handles file upload, download, deletion and navigation through directories.
+    """
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
         self.current_dir = None
-
+    
+    # creates content
     def create_content(self):
         self.master.create_topbar("My Files")
 
@@ -215,7 +308,7 @@ class MyFilesPage(Page):
         )
         self.open_folder_button.pack(side=tk.LEFT, padx=5)
 
-        self.file_list = tk.Listbox(self, height=30, width=80, selectforeground=self.text_color, selectbackground=self.button_color, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
+        self.file_list = tk.Listbox(self, height=20, width=80, selectforeground=self.text_color, selectbackground=self.button_color, font=("Figtree", 14), fg=self.text_color, bg=self.bg_color)
         self.file_list.pack(pady=10)
         self.file_list.bind("<<ListboxSelect>>", self.on_file_select)
         # self.file_list.bind("<Double-Button-1>", self.on_double_click) # Currently not working
@@ -240,6 +333,7 @@ class MyFilesPage(Page):
 
         self.request_files()
     
+    # opens selected folder
     def open_selected_folder(self, event=None):
         try:
             selected_indices = self.file_list.curselection()
@@ -258,6 +352,7 @@ class MyFilesPage(Page):
         except Exception as e:
             self.show_error(f"Error handling double-click: {e}")
 
+    # requests files from server
     def request_files(self):
         dir_message = DirMessage()
         try:
@@ -287,6 +382,7 @@ class MyFilesPage(Page):
         except Exception as e:
             print(f"Error: {e}")
 
+    # displays files
     def display_files(self, dir_info):
         self.file_list.delete(0, tk.END)
         for item in dir_info.contents():
@@ -295,9 +391,11 @@ class MyFilesPage(Page):
             elif isinstance(item, DirectoryInfo):
                 self.file_list.insert(tk.END, f"{item.name()} (d)")
 
+    # thread for uploading files
     def upload_files(self):
         threading.Thread(target=self._upload_files).start()
 
+    # uploads files from client to server
     def _upload_files(self):
         file_path = filedialog.askopenfilename()
         if file_path is None or len(file_path) == 0:
@@ -329,9 +427,11 @@ class MyFilesPage(Page):
         except Exception as e:
             self.show_error(f"Error: {e}")
 
+    # gets file kind
     def get_file_kind(self, file_name) -> FileType:
         return get_file_type(Path(file_name))
-        
+    
+    # sends file data to server
     def send_file_data(self, file_contents):
         try:
             sent_count = 0
@@ -364,9 +464,11 @@ class MyFilesPage(Page):
         except Exception as e:
             self.show_error(f"Error Test2: {e}")  
 
+    # thread for downloading files
     def download_files(self):
         threading.Thread(target=self._download_files).start()
 
+    # downloads files from server
     def _download_files(self):
         try:
             selected_file = self.file_list.get(self.file_list.curselection())
@@ -386,17 +488,21 @@ class MyFilesPage(Page):
                     if save_path:
                         receive_network_file(Path(save_path), self.master.con, size)
                         print("Download complete.")
+                        self.master.con.sendall(AckMessage(200, "OK").construct_message_json().encode())
                     else:
                         print("Download cancelled.")
+                        self.master.con.sendall(AckMessage(400, "Download canceled by user").construct_message_json().encode())
                         self.clear_socket_buffer()
                 else:
                     print(f"Failed to download file because: {download_message.message()}")
         except Exception as e:
             print(f"Error: {e}")
 
+    # thread for deleting files
     def delete_files(self):
         threading.Thread(target=self._delete_files).start()
 
+    # deletes files from server
     def _delete_files(self):
         try:
             selected_file = self.file_list.get(self.file_list.curselection())
@@ -417,11 +523,13 @@ class MyFilesPage(Page):
         except Exception as e:
             print(f"Error: {e}")
 
+    # thread for creating subfolder
     def create_subfolder(self):
         folder_name = simpledialog.askstring("Create Subfolder", "Enter the name of the subfolder:")
         if folder_name is not None or len(folder_name.strip()) > 0:
             threading.Thread(target=self._create_subfolder(folder_name)).start()
 
+    # creates subfolder on server
     def _create_subfolder(self, folder_name):
         try:
             self.master.con.sendall(SubfolderMessage(folder_name, SubfolderAction.Add).construct_message_json().encode())
@@ -436,14 +544,16 @@ class MyFilesPage(Page):
             self.after(0, self.update_button_states)
         except Exception as e:
             print(f"Error: {e}")
-            
+
+    # thread for deleting subfolder
     def delete_subfolder(self):
         selected_dir = self.file_list.get(self.file_list.curselection())
         selected_dir = selected_dir.split(" ")[0].strip()
         
         if selected_dir is not None or len(selected_dir) > 0:
             threading.Thread(target=self._delete_subfolder(selected_dir)).start()
-    
+            
+    # deletes subfolder from server
     def _delete_subfolder(self, selected_dir):
         try:
             self.master.con.sendall(SubfolderMessage(selected_dir, SubfolderAction.Delete).construct_message_json().encode())
@@ -458,10 +568,12 @@ class MyFilesPage(Page):
             self.after(0, self.update_button_states)
         except Exception as e:
             print(f"Error: {e}")
-                
+    
+    # thread for moving directory
     def move_directory(self, move_path):
         threading.Thread(target=self._move_directory, args=(move_path,)).start()
 
+    # moves directory on server
     def _move_directory(self, move_path):
         try:
             # Send move message to server
@@ -480,7 +592,8 @@ class MyFilesPage(Page):
                         
         except Exception as e:
             self.show_error(f"Error during directory navigation: {e}")
-
+    
+    # moving to different directory
     def move_up_directory(self):
         try:
             # Send move message with ".." to go up one level
@@ -498,6 +611,7 @@ class MyFilesPage(Page):
         except Exception as e:
             self.show_error(f"Error moving up directory: {e}")
     
+    # updates button states
     def update_button_states(self):
         selected_indices = self.file_list.curselection()
         if not selected_indices:
@@ -522,9 +636,11 @@ class MyFilesPage(Page):
             self.delete_button.config(state=tk.DISABLED)
             self.open_folder_button.config(state=tk.DISABLED)
 
+    # on file select, update button states
     def on_file_select(self, event):
         self.update_button_states()
 
+    # clears socket buffer so client can continue
     def clear_socket_buffer(self):
         try:
             self.master.con.settimeout(0.1)
@@ -536,14 +652,23 @@ class MyFilesPage(Page):
             pass
         finally:
             self.master.con.settimeout(None)
-            
+    
+    # displays errors
     def show_error(self, message):
         self.after(0, lambda: messagebox.showerror("Error", message))
 
 class PerformancePage(Page):
+    """
+    Displays performance metrics like data transfer rates and latency.
+    Shows real-time statistics about file operations.
+    """
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
+        self.data_rate = None
+        self.file_transfer_time = None
+        self.latency = None
 
+    # create content
     def create_content(self):
         self.master.create_topbar("Performance")
 
@@ -556,74 +681,210 @@ class PerformancePage(Page):
         )
         self.performance_label.pack(pady=10)
 
-        self.performance_text = tk.Text(
+        # self.performance_text = tk.Text(
+        #     self,
+        #     height=20,
+        #     width=80,
+        #     font=("Figtree", 12),
+        #     fg=self.text_color,
+        #     bg=self.bg_color
+        # )
+        # self.performance_text.pack(pady=10)
+        
+        self.data_rate_label = tk.Label(
             self,
-            height=20,
-            width=80,
-            font=("Figtree", 12),
+            text=f"Data Rate (MB/s): {self.data_rate}",
+            font=("Figtree", 14),
             fg=self.text_color,
             bg=self.bg_color
         )
-        self.performance_text.pack(pady=10)
+        self.data_rate_label.pack(pady=10)
+        
+        self.file_transfer_label = tk.Label(
+            self,
+            text=f"File Transfer Time (ms): {self.file_transfer_time}",
+            font=("Figtree", 14),
+            fg=self.text_color,
+            bg=self.bg_color
+        )
+        self.file_transfer_label.pack(pady=10)
+        
+        self.latency_label = tk.Label(
+            self,
+            text=f"Latency (ms): {self.latency}",
+            font=("Figtree", 14),
+            fg=self.text_color,
+            bg=self.bg_color
+        )
+        self.latency_label.pack(pady=10)
 
         self.get_stats()
 
-        # self.refresh_button = Button(
-        #     self,
-        #     text="Refresh",
-        #     command=self.refresh_performance,
-        #     font=("Figtree", 14),
-        #     bg=self.button_color,
-        #     fg=self.text_color,
-        #     borderless=1
-        # )
-        # self.refresh_button.pack(pady=10)
+    # updates labels
+    def update_labels(self):
+        data_rate_rounded = round(self.data_rate, 2) if self.data_rate is not None else 0
+        file_transfer_rounded = round(self.file_transfer_time, 2) if self.file_transfer_time is not None else 0
+        latency_rounded = round(self.latency, 2) if self.latency is not None else 0
+
+        self.data_rate_label.config(text=f"Data Rate (MB/s): {data_rate_rounded}")
+        self.file_transfer_label.config(text=f"File Transfer Time (ms): {file_transfer_rounded}")
+        self.latency_label.config(text=f"Latency (ms): {latency_rounded}")
+
+    # gets stats from server on recent upload or download
     def get_stats(self):
         try:
             
             self.master.con.sendall(StatsMessage().construct_message_json().encode())
-            print("HERE")
             stats_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
             stats_message = MessageBasis.parse_from_json(stats_resp)
-            print("HERE2")
             if stats_message is not None and isinstance(stats_message, StatsMessage):
-                print(stats_message.data)
-                self.performance_text.delete(1.0, tk.END)
-                self.performance_text.insert(tk.END, stats_message)
+                self.data_rate = stats_message.data_rates()
+                self.file_transfer_time = stats_message.file_transfer_time()
+                self.latency = stats_message.latency()
+                self.update_labels()
             else:
                 self.show_error(f"Failed to get performance stats: {stats_message.message()}")
         except Exception as e:
             self.show_error(f"Error: {e}")
 
+    # refreshes stats
+    def refresh_stats(self):
+        self.get_stats()
+
+    # shows error
     def show_error(self, message):
         self.after(0, lambda: messagebox.showerror("Error", message))
 
 class SettingsPage(Page):
+    """
+    Handles application theme customization.
+    Allows users to modify colors and save preferences.
+    """
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
+        self.current_colors = {
+            "bg_color": bg_color,
+            "text_color": text_color,
+            "button_color": button_color
+        }
+        self.reset_content()
 
+    # creates content
     def create_content(self):
-        raise NotImplementedError("Subclasses should implement this method.")
+        title = tk.Label(
+            self,
+            text="Settings",
+            font=("Figtree", 24, "bold"),
+            bg= self.current_colors["bg_color"],
+            fg=self.current_colors["text_color"]
+        )
+        title.pack(pady=10)
+        
+        for color_key in self.current_colors:
+            frame = tk.Frame(self, bg=self.current_colors["bg_color"])
+            frame.pack(pady=10)
 
-    def save_settings(self, setting):
-        print(f"Setting saved: {setting}")
+            label = tk.Label(
+                frame,
+                text=f"{color_key.title()} Color:",
+                bg=self.current_colors["bg_color"],
+                fg=self.current_colors["text_color"]
+            )
+            label.pack(side=tk.LEFT, padx=10)
 
-class ConnectPage(Page):
+            preview = tk.Label(
+                frame,
+                width=10,
+                bg=self.current_colors[color_key]
+            )
+            preview.pack(side=tk.LEFT, padx=5)
+
+            btn = tk.Button(
+                frame,
+                text="Choose",
+                command=lambda k=color_key, p=preview: self.pick_color(k, p),
+                bg=self.current_colors["button_color"]
+            )
+            btn.pack(side=tk.LEFT, padx=5)
+
+        # Apply button
+        apply_btn = tk.Button(
+            self,
+            text="Apply Changes",
+            command=self.apply_colors,
+            bg=self.current_colors["button_color"]
+        )
+        apply_btn.pack(pady=20)
+
+        # Reset button
+        reset_btn = tk.Button(
+            self,
+            text="Reset to Defaults",
+            command=self.reset_colors,
+            bg=self.current_colors["button_color"]
+        )
+        reset_btn.pack(pady=5)
+
+    # allows user to select color
+    def pick_color(self, color_key, preview):
+        color = colorchooser.askcolor(color=self.current_colors[color_key])[1]
+        if color:
+            self.current_colors[color_key] = color
+            preview.configure(bg=color)
+    
+    # applies colors
+    def apply_colors(self):
+        self.master.update_theme(
+            self.current_colors["bg_color"],
+            self.current_colors["text_color"],
+            self.current_colors["button_color"]
+    )
+
+    # updates page colors
+    def _update_page_colors(self):
+        for widget in self.winfo_children():
+            if isinstance(widget, tk.Label):
+                widget.configure(
+                    bg=self.current_colors["bg_color"],
+                    fg=self.current_colors["text_color"]
+                )
+            elif isinstance(widget, tk.Button):
+                widget.configure(bg=self.current_colors["bg_color"])
+            elif isinstance(widget, tk.Frame):
+                widget.configure(bg=self.current_colors["bg_color"])
+
+    # resets colors to default
+    def reset_colors(self):
+        self.current_colors = {
+            "bg_color": "#2C2C2C",
+            "text_color": "white",
+            "button_color": "#BB86FC"
+        }
+        self.apply_colors()
+
+class ConnectPage(Page):    
+    """
+    Handles user authentication and server connection.
+    Manages login credentials and connection settings.
+    """
     def __init__(self, parent, bg_color, text_color, button_color):
         super().__init__(parent, bg_color, text_color, button_color)
         self.username = ""
         self.password = ""
         self.ip = "127.0.0.1"
         self.port = 61324
-        self.load_content()
+        self.create_content()
 
+    # hashes password with sha256
     def hash_password(self, plain_password):
         hashed_password = hashlib.sha256(plain_password.encode()).hexdigest()
         return hashed_password
     
+    # thread to start login validation
     def validate_login(self):
         threading.Thread(target=self._validate_login).start()
 
+    # validates login credentials with server
     def _validate_login(self):
         self.username = self.username_entry.get()
         self.password = self.password_entry.get()
@@ -663,6 +924,7 @@ class ConnectPage(Page):
         except Exception as e:
             messagebox.showerror("Error", f"Error: {e}")
 
+    # saves connection details, with ip and port
     def save_connection_details(self):
         try:
             ip = self.ip_address_entry.get()
@@ -677,6 +939,7 @@ class ConnectPage(Page):
         except ValueError:
             messagebox.showerror("Error", "Invalid port number.")
 
+    # creates connection with server
     def create_connection(self):
         try:
             self.con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -689,7 +952,8 @@ class ConnectPage(Page):
                 self.con.close()
             self.master.status_update("Offline")
 
-    def load_content(self):
+    # creates content
+    def create_content(self):
         self.reset_content()
 
         user_pass_frame = tk.Frame(self, bg=self.bg_color)
