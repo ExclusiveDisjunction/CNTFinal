@@ -1,7 +1,6 @@
 from Common.message_handler import *
 from Common.file_io import DirectoryInfo, FileInfo, FileType, read_file_for_network, receive_network_file, receive_network_file_binary
 import socket
-import time
 
 def print_dir_structure(dir: DirectoryInfo, ts = ''):
     if dir is None:
@@ -147,54 +146,6 @@ def client_test_server() -> bool:
         print(f"Caught {str(e)}")
         return False
 
-def multi_thread_testing() -> bool:
-    try:
-        ip = input("What is the server IP? (0 for local host, -1 for server external) ")
-        port = int(input("What is the port? (0 for default) "))
-        if ip == "0":
-            ip = "127.0.0.1"
-        elif ip == "-1":
-            ip = "35.184.69.189"
-        if port == 0:
-            port = 61324
-
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((ip, port))
-        
-        connect = ConnectMessage("hi", "djdlkdjf")
-        s.sendall(connect.construct_message_json().encode())
-
-        contents = s.recv(1024)
-        if contents is None or len(contents) == 0:
-            print("Connection terminated")
-            s.close()
-
-            return False
-
-        recv = MessageBasis.parse_from_json(contents.decode("utf-8"))
-        if not isinstance(recv, AckMessage):
-            print(f"Unexpected message of type {recv.message_type()}")
-            s.close()
-            return False
-        
-        def get_contents(socket, size: int = 1024):
-            return socket.recv(size).strip(b'\x00').decode("utf-8")
-        def get_message(socket, size: int = 1024):
-            return MessageBasis.parse_from_json(get_contents(socket, size))
-        def send_message(socket, message: MessageBasis):
-            socket.send(message.construct_message_json().encode())
-
-
-        input("Enter a value and press enter to exit")
-        send_message(s, CloseMessage())
-        ack = get_message(s)
-        if ack is not None and isinstance(ack, AckMessage):
-            print("Connecton closed")
-        else:
-            print("Close sent, but got weird message")
-    except Exception as e:
-        print(f"Caught '{str(e)}'")
-
 def messages_tester() -> bool:
     """
     We will evaluate all kinds of messages. It will start by constructing an instance of that Message (request and response variants, if possible), and then sterilize into JSON. Then, it will de-sterilize, parse, and assert the two are equal.
@@ -225,77 +176,6 @@ def messages_tester() -> bool:
     except Exception as e:
         print(f"Caught {str(e)}")
 
-def send_big_file_test() -> bool:
-    try:
-        ip = input("What is the server IP? (0 for local host, -1 for server external) ")
-        port = int(input("What is the port? (0 for default) "))
-        if ip == "0":
-            ip = "127.0.0.1"
-        elif ip == "-1":
-            ip = "35.184.69.189"
-        if port == 0:
-            port = 61324
-
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((ip, port))
-        
-        connect = ConnectMessage("hi", "djdlkdjf")
-        s.sendall(connect.construct_message_json().encode())
-
-        contents = s.recv(1024)
-        if contents is None or len(contents) == 0:
-            print("Connection terminated")
-            s.close()
-
-            return False
-
-        recv = MessageBasis.parse_from_json(contents.decode("utf-8"))
-        if not isinstance(recv, AckMessage):
-            print(f"Unexpected message of type {recv.message_type()}")
-            s.close()
-            return False
-        
-        def get_contents(socket, size: int = 1024):
-            return socket.recv(size).strip(b'\x00').decode("utf-8")
-        def get_message(socket, size: int = 1024):
-            return MessageBasis.parse_from_json(get_contents(socket, size))
-        def send_message(socket, message: MessageBasis):
-            socket.send(message.construct_message_json().encode())
-
-        frames = read_file_for_network(Path("bigtext.txt"))
-        print(f"Sending {len(frames)} frames")
-        send_message(s, UploadMessage("bigtext.txt", FileType.Text, len(frames)))
-        ack = get_message(s)
-        if ack is not None and isinstance(ack, AckMessage):
-            if ack.code() != 200:
-                print(f"Upload failed because '{ack.message()}'")
-            else:
-                sent_count = 0
-                for item in frames:
-                    s.sendall(item)
-                    sent_count += 1
-
-                assert sent_count == len(frames), "Failed to send all items"
-                ack = get_message(s)
-                if ack is not None and isinstance(ack, AckMessage):
-                    if ack.code() != 200:
-                        print(f"Upload failed because '{ack.message()}'")
-                    else:
-                        print("Upload success")
-
-
-        input("Enter a value and press enter to exit")
-        send_message(s, CloseMessage())
-        ack = get_message(s)
-        if ack is not None and isinstance(ack, AckMessage):
-            print("Connecton closed")
-            return True
-        else:
-            print("Close sent, but got weird message")
-            return False
-    except Exception as e:
-        print(f"Caught '{str(e)}'")
-
 def dir_resp_test() -> bool:
     creds = "Hi"
     root = DirectoryInfo("", 
@@ -322,7 +202,7 @@ def dir_resp_test() -> bool:
 
 
 if __name__ == "__main__":
-    if send_big_file_test():
+    if client_test_server():
         print("\nAll tests passed")
     else:
         print("\nOne or more tests failed")

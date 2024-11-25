@@ -228,6 +228,7 @@ def receive_network_file(path: Path, s: socket, frame_size: int, buff_size: int 
         if frame_size < 0:
             return False
         
+        total_windows = frame_size
         frame_size *= buff_size
         
         with open(path, 'wb') as f:
@@ -240,6 +241,8 @@ def receive_network_file(path: Path, s: socket, frame_size: int, buff_size: int 
                 
                     f.write(chunk.rstrip(b'\0')) # Remove trailing zeroes from buffer packing
                     frame_size -= len(chunk)
+                    if frame_size < buff_size:
+                        print(f"About to run out {frame_size}")
                 except socket.timeout:
                     if retry_count <= 0:
                         print(f"[IO] Network file recv failed because of retry fails")
