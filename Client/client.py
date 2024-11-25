@@ -436,7 +436,7 @@ class MyFilesPage(Page):
         try:
             sent_count = 0
             for item in file_contents:
-                self.master.con.send(item)
+                self.master.con.sendall(item)
                 sent_count += 1
                 
             if sent_count != len(file_contents):

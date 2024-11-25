@@ -4,6 +4,8 @@ from pathlib import Path
 import json
 import os
 
+file_buffer_size = 4096  # Add this line
+
 from .credentials import Credentials
 from .server_paths import root_directory
 from Common.file_io import FileInfo, DirectoryInfo, get_file_total_size
@@ -161,3 +163,18 @@ def create_directory_info(start_path: Path = None) -> DirectoryInfo:
     result = DirectoryInfo(base_name)
     result.set_contents(contents_to_list(start_path))
     return result
+
+def UploadFile(upload_handle, conn, size):
+    try:
+        with open(upload_handle.path, 'wb') as f:
+            remaining_size = size
+            while remaining_size > 0:
+                chunk = conn.recv(min(file_buffer_size, remaining_size))
+                if not chunk:
+                    return False
+                f.write(chunk)
+                remaining_size -= len(chunk)
+        return True
+    except Exception as e:
+        print(f"UploadFile error: {e}")
+        return False
