@@ -483,11 +483,8 @@ class MyFilesPage(Page):
             )
             if not save_path:
                 return
-                
-            # Ensures proper path construction for download request
-            download_path = Path(self.current_dir) / file_name if self.current_dir else file_name
-            
-            self.master.con.sendall(DownloadMessage(str(download_path)).construct_message_json().encode())
+                            
+            self.master.con.sendall(DownloadMessage(file_name).construct_message_json().encode())
             
             download_resp = self.master.con.recv(1024).strip(b'\x00').decode("utf-8")
             download_message = MessageBasis.parse_from_json(download_resp)
