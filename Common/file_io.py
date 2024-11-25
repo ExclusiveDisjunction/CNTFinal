@@ -249,8 +249,7 @@ def receive_network_file(path: Path, s: socket, frame_size: int, buff_size: int 
                         f.write(chunk.rstrip(b'\x00')) # Remove trailing zeroes from buffer packing
                     else:
                         f.write(chunk)
-                
-                    f.write(chunk.rstrip(b'\x00')) # Remove trailing zeroes from buffer packing
+                        
                     frame_size -= len(chunk)
                     windows_so_far += len(chunk) / buff_size
                 except socket.timeout:
