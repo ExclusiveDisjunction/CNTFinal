@@ -275,7 +275,7 @@ def receive_network_file_binary(socket: socket, frame_size: int, buff_size: int 
         result = b''
         while frame_size > 0 and windows_so_far < total_windows:
             try:
-                chunk = s.recv(buff_size)
+                chunk = socket.recv(buff_size)
                 if chunk is None or len(chunk) == 0:
                     print("[DEBUG] Network Rev Finished, chunks not all done.")
                     return False
