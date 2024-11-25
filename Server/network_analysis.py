@@ -39,7 +39,7 @@ class NetworkAnalyzer:
                             "transfer_time": stat.transfer_time,
                             "data_rate": stat.data_rate,
                             "latency": stat.latency,
-                            "up": stat.ip,
+                            "ip": stat.ip,
                         }
                         for stat in self.stats
                     ]
@@ -62,13 +62,10 @@ class NetworkAnalyzer:
         self.stats.append(stat)
 
     def get_ip_stats(self, ip: str) -> list[TransferStats]:
-        return list(filter(lambda x: x.ip == ip, self.stats))
+        return [stat for stat in self.stats if stat.ip == ip]
     def get_last_ip_stats(self, ip: str) -> TransferStats | None:
-        list = self.get_ip_stats(ip)
-        if len(list) == 0:
-            return None
-        else:
-            return list[-1]
+        ip_stats = self.get_ip_stats(ip)
+        return ip_stats[-1] if ip_stats else None
 
     # Calculates data rate in MB/s
     def _calculate_data_rate(file_size: int, transfer_time: float) -> float:
