@@ -266,7 +266,7 @@ def receive_network_file_binary(socket: socket, frame_size: int, buff_size: int 
     retry_count = 5
     try:
         if frame_size < 0:
-            return False
+            return None
         
         total_windows = frame_size
         frame_size *= buff_size
@@ -278,7 +278,7 @@ def receive_network_file_binary(socket: socket, frame_size: int, buff_size: int 
                 chunk = socket.recv(buff_size)
                 if chunk is None or len(chunk) == 0:
                     print("[DEBUG] Network Rev Finished, chunks not all done.")
-                    return False
+                    return None
             
                 result += chunk.rstrip(b'\x00') # Remove trailing zeroes from buffer packing
                 frame_size -= len(chunk)
@@ -286,11 +286,11 @@ def receive_network_file_binary(socket: socket, frame_size: int, buff_size: int 
             except socket.timeout:
                 if retry_count <= 0:
                     print(f"[IO] Network file recv failed because of retry fails")
-                    return False
+                    return None
                 retry_count -= 1
                 continue
 
-        return True
+        return result
     except Exception as e:
         print(f"[IO] Network file recv failed with message '{str(e)}'")
-        return False
+        return None
