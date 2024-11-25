@@ -710,7 +710,7 @@ class PerformancePage(Page):
         
         self.file_transfer_label = tk.Label(
             self,
-            text=f"File Transfer Time (ms): {self.file_transfer_time}",
+            text=f"File Transfer Time (s): {self.file_transfer_time}",
             font=("Figtree", 14),
             fg=self.text_color,
             bg=self.bg_color
@@ -719,7 +719,7 @@ class PerformancePage(Page):
         
         self.latency_label = tk.Label(
             self,
-            text=f"Latency (ms): {self.latency}",
+            text=f"Latency (s): {self.latency}",
             font=("Figtree", 14),
             fg=self.text_color,
             bg=self.bg_color
