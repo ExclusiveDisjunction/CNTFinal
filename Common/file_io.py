@@ -216,7 +216,6 @@ def split_binary_for_network(contents: bytes, buff_size: int = file_buffer_size)
     result = list([contents[i * buff_size:(i+1) * buff_size] for i in range(int(ceil(len(contents) / buff_size))) ])
     if len(result) != 0:
         result[-1] = result[-1].ljust(4096, b'\x00') # We have to add trailing zeroes so that our data will always fit within the buffer & the recv will work properly
-        print(f"Len of last {len(result[-1])}")
 
     avg_size = 0
     for item in result:
