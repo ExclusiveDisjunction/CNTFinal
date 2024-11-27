@@ -735,8 +735,8 @@ class PerformancePage(Page):
         latency_rounded = round(self.latency, 2) if self.latency is not None else 0
 
         self.data_rate_label.config(text=f"Data Rate (MB/s): {data_rate_rounded}")
-        self.file_transfer_label.config(text=f"File Transfer Time (ms): {file_transfer_rounded}")
-        self.latency_label.config(text=f"Latency (ms): {latency_rounded}")
+        self.file_transfer_label.config(text=f"File Transfer Time (s): {file_transfer_rounded}")
+        self.latency_label.config(text=f"Latency (s): {latency_rounded}")
 
     # gets stats from server on recent upload or download
     def get_stats(self):
